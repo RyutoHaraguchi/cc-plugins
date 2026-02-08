@@ -1,5 +1,5 @@
 ---
-name: setup
+name: plan-setup
 description: "Initialize cc-plan-flow directories and verify configuration for the current project"
 disable-model-invocation: true
 ---

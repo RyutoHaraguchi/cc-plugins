@@ -7,7 +7,7 @@
 - **ディレクトリ自動作成** — セッション開始時に `.claude/plans/{ToDo,InProgress,Done}/` を自動作成（SessionStart hook）
 - **プランファイル自動リネーム** — プランモード終了時、YAML frontmatter の `plan-name` でファイルを自動リネーム（PostToolUse hook）
 - **ライフサイクルルール** — Claude がプラン関連の作業時に自動適用する Skill。ToDo → InProgress → Done のフローを強制
-- **セットアップ確認** — `/cc-plan-flow:setup` で現在のプロジェクトの設定状態を確認
+- **セットアップ確認** — `/cc-plan-flow:plan-setup` で現在のプロジェクトの設定状態を確認
 
 ## インストール
 
@@ -37,7 +37,7 @@ claude --plugin-dir ./plugins/cc-plan-flow
 }
 ```
 
-または `/cc-plan-flow:setup` を実行すると、設定状態の確認とガイドが表示されます。
+または `/cc-plan-flow:plan-setup` を実行すると、設定状態の確認とガイドが表示されます。
 
 ## ワークフロー
 
