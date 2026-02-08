@@ -1,0 +1,20 @@
+{
+  "name": "cc-plugins",
+  "description": "Personal Claude Code plugins by ryutoharaguchi",
+  "owner": {
+    "name": "ryutoharaguchi"
+  },
+  "metadata": {
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "cc-plan-flow",
+      "description": "Plan lifecycle management with ToDo/InProgress/Done workflow",
+      "source": "./plugins/cc-plan-flow",
+      "version": "1.0.0",
+      "keywords": ["plan", "workflow", "lifecycle", "todo"],
+      "category": "productivity"
+    }
+  ]
+}

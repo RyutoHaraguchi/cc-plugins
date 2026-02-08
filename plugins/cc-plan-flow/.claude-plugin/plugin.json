@@ -1,0 +1,9 @@
+{
+  "name": "cc-plan-flow",
+  "description": "Plan ToDo/InProgress/Done workflow for Claude Code",
+  "version": "1.0.0",
+  "author": {
+    "name": "John Doe"
+  },
+  "keywords": ["plan", "workflow", "lifecycle", "todo"]
+}
