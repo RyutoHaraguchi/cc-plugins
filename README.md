@@ -21,9 +21,3 @@ Claude Code プラグインマーケットプレイス。
 ```bash
 /plugin install cc-plan-flow
 ```
-
-### ローカル開発
-
-```bash
-claude --plugin-dir ./plugins/cc-plan-flow
-```
