@@ -10,13 +10,15 @@ disable-model-invocation: true
 
 ## 手順
 
-### 1. ディレクトリの確認と作成
-以下のディレクトリが存在するか確認し、なければ作成する:
-- `./.claude/plans/ToDo/`
-- `./.claude/plans/InProgress/`
-- `./.claude/plans/Done/`
+### 1. ディレクトリの確認
+以下のディレクトリが存在するか確認する（Glob や ls で確認すること）:
+- `.claude/plans/ToDo/`
+- `.claude/plans/InProgress/`
+- `.claude/plans/Done/`
 
-各ディレクトリについて、作成したか既存だったかを記録する。
+注意: SessionStart hook が自動作成するため、通常は既に存在する。
+- 既に存在する場合: 「✓ 存在確認済み」と記録するだけ。mkdir 等の作成コマンドは実行しない。
+- 存在しない場合のみ: ディレクトリを作成する。
 
 ### 2. settings.json の確認
 `.claude/settings.json` が存在するか確認し、`plansDirectory` 設定が含まれているかチェックする。
