@@ -1,28 +1,28 @@
 # cc-plugins
 
-Personal Claude Code plugin marketplace.
+Claude Code プラグインマーケットプレイス。
 
-## Available Plugins
+## 利用可能なプラグイン
 
-| Plugin | Description |
+| プラグイン | 説明 |
 |--------|-------------|
-| [cc-plan-flow](./plugins/cc-plan-flow/) | Manage plan files through a ToDo → InProgress → Done lifecycle with auto-renaming and directory setup |
+| [cc-plan-flow](./plugins/cc-plan-flow/) | プランファイルを ToDo → InProgress → Done のライフサイクルで管理。自動リネーム・ディレクトリ自動作成付き |
 
-## Usage
+## 使い方
 
-### Add the marketplace
+### マーケットプレイスを追加
 
 ```bash
-/plugin marketplace add <owner>/cc-plugins
+/plugin marketplace add RyutoHaraguchi/cc-plugins
 ```
 
-### Install a plugin
+### プラグインをインストール
 
 ```bash
 /plugin install cc-plan-flow
 ```
 
-### Local development
+### ローカル開発
 
 ```bash
 claude --plugin-dir ./plugins/cc-plan-flow
