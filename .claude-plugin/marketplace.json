@@ -9,11 +9,11 @@
   },
   "plugins": [
     {
-      "name": "cc-plan-flow",
-      "description": "Plan lifecycle management with ToDo/InProgress/Done workflow",
-      "source": "./plugins/cc-plan-flow",
+      "name": "cc-html",
+      "description": "Generate local HTML artifacts (operational briefs) from files, links, PRs, or context",
+      "source": "./plugins/cc-html",
       "version": "1.0.0",
-      "keywords": ["plan", "workflow", "lifecycle", "todo"],
+      "keywords": ["html", "artifact", "brief", "review", "documentation"],
       "category": "productivity"
     }
   ]

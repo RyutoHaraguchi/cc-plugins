@@ -1,0 +1,9 @@
+{
+  "name": "cc-html",
+  "description": "Generate local HTML artifacts (operational briefs) from files, links, PRs, or context",
+  "version": "1.0.0",
+  "author": {
+    "name": "ryutoharaguchi"
+  },
+  "keywords": ["html", "artifact", "brief", "review", "documentation"]
+}

@@ -6,7 +6,7 @@ Claude Code プラグインマーケットプレイス。
 
 | プラグイン | 説明 |
 |--------|-------------|
-| [cc-plan-flow](./plugins/cc-plan-flow/) | プランファイルを ToDo → InProgress → Done のライフサイクルで管理。自動リネーム・ディレクトリ自動作成付き |
+| [cc-html](./plugins/cc-html/) | `/html` でローカル HTML 成果物（operational brief）を生成。ファイル・PR・Issue・会話文脈から人間用の理解ページを作成 |
 
 ## 使い方
 
@@ -19,11 +19,11 @@ Claude Code プラグインマーケットプレイス。
 ### プラグインをインストール
 
 ```bash
-/plugin install cc-plan-flow
+/plugin install cc-html
 ```
 
 ### ローカル開発
 
 ```bash
-claude --plugin-dir ./plugins/cc-plan-flow
+claude --plugin-dir ./plugins/cc-html
 ```
