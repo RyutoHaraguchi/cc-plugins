@@ -10,7 +10,7 @@
     "typescript": "~5.9.3"
   },
   "devDependencies": {
-    "@playwright/test": "1.49.1"
+    "@playwright/test": "1.61.1"
   },
   "scripts": {
     "test": "node --test \"test/*.test.mjs\"",
