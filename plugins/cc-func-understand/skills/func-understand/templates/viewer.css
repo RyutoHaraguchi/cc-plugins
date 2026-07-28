@@ -1,0 +1,192 @@
+:root {
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: #0d1117;
+  color: #c9d1d9;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+/* ---------------------------------------------------------- */
+/* バナー */
+/* ---------------------------------------------------------- */
+#banner {
+  flex: 0 0 auto;
+  background: #161b22;
+  border-bottom: 1px solid #30363d;
+  padding: 8px 12px;
+  font-size: 13px;
+}
+
+#banner .meta-line {
+  color: #8b949e;
+  margin-bottom: 4px;
+}
+
+#banner .limitations {
+  margin: 0 0 6px;
+  padding-left: 18px;
+  color: #8b949e;
+  font-size: 12px;
+}
+
+#banner .truncation-warning {
+  color: #d29922;
+  margin-bottom: 6px;
+  font-size: 12px;
+}
+
+#banner .controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+#banner .entry-select-wrap {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: #8b949e;
+}
+
+#banner .entry-note {
+  margin-top: 4px;
+  font-size: 11px;
+  color: #6e7681;
+}
+
+#search {
+  background: #0d1117;
+  border: 1px solid #30363d;
+  color: #c9d1d9;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 12px;
+  min-width: 200px;
+}
+
+#search:focus {
+  outline: 1px solid #58a6ff;
+}
+
+#expand-all,
+#entry-select,
+button {
+  background: #21262d;
+  border: 1px solid #30363d;
+  color: #c9d1d9;
+  border-radius: 4px;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+#expand-all:hover,
+button:hover {
+  background: #30363d;
+}
+
+/* ---------------------------------------------------------- */
+/* メインレイアウト */
+/* ---------------------------------------------------------- */
+main {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+}
+
+#graph {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  background: #0d1117;
+}
+
+/* ---------------------------------------------------------- */
+/* 詳細パネル */
+/* ---------------------------------------------------------- */
+#detail {
+  width: 420px;
+  flex: 0 0 420px;
+  overflow-y: auto;
+  border-left: 1px solid #30363d;
+  background: #0d1117;
+  padding: 14px;
+  font-size: 13px;
+}
+
+#detail .detail-name {
+  font-size: 16px;
+  margin: 0 0 4px;
+  color: #f0f6fc;
+  word-break: break-word;
+}
+
+#detail .detail-kind {
+  display: inline-block;
+  color: #8b949e;
+  background: #21262d;
+  border: 1px solid #30363d;
+  border-radius: 10px;
+  padding: 1px 8px;
+  font-size: 11px;
+  margin-bottom: 10px;
+}
+
+#detail .summary {
+  margin-bottom: 10px;
+  line-height: 1.5;
+  color: #c9d1d9;
+  white-space: pre-wrap;
+}
+
+#detail .loc {
+  color: #6e7681;
+  font-size: 11px;
+  margin-bottom: 10px;
+  word-break: break-all;
+}
+
+#detail .expand-buttons {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+#detail pre {
+  margin: 0;
+  border-radius: 6px;
+  overflow: auto;
+  max-height: 60vh;
+}
+
+#detail pre code {
+  font-size: 12px;
+  line-height: 1.5;
+  display: block;
+  padding: 10px;
+}
+
+/* highlight.js の github-dark テーマが未適用のまま(自動言語検出前など)でも
+   最低限読める配色にしておく。 */
+#detail pre code.hljs {
+  background: #0d1117;
+}
