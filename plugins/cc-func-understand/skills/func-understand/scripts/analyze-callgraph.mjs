@@ -48,6 +48,16 @@ function stripSelection(node) {
   return rest;
 }
 
+/** CLI 数値オプションを検証付きでパースする。空/未指定なら undefined、不正値は例外。 */
+function parseIntOption(name, raw) {
+  if (raw == null) return undefined;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) {
+    throw new Error(`${name} は数値で指定してください(受け取った値: "${raw}")`);
+  }
+  return n;
+}
+
 export async function main(argv) {
   const args = parseCliArgs(argv);
 
@@ -59,7 +69,7 @@ export async function main(argv) {
   const { ts, source: tsSource, version: tsVersion } = loadTypeScript(projectRoot);
   const proj = loadProject(ts, projectRoot, args.tsconfig);
 
-  const line = args.line != null ? Number(args.line) : undefined;
+  const line = parseIntOption('--line', args.line);
   const resolution = resolveTarget(ts, proj, { functionName: args.function, file: args.file, line }, projectRoot);
 
   if (resolution.status === 'ambiguous') {
@@ -73,9 +83,9 @@ export async function main(argv) {
     return;
   }
 
-  const maxNodes = args['max-nodes'] != null ? Number(args['max-nodes']) : undefined;
-  const upstreamDepth = args['upstream-depth'] != null ? Number(args['upstream-depth']) : undefined;
-  const downstreamDepth = args['downstream-depth'] != null ? Number(args['downstream-depth']) : undefined;
+  const maxNodes = parseIntOption('--max-nodes', args['max-nodes']);
+  const upstreamDepth = parseIntOption('--upstream-depth', args['upstream-depth']);
+  const downstreamDepth = parseIntOption('--downstream-depth', args['downstream-depth']);
 
   const buildOpts = { projectRoot };
   if (maxNodes != null) buildOpts.maxNodes = maxNodes;
@@ -88,7 +98,7 @@ export async function main(argv) {
   graph.meta = {
     tsVersion,
     tsSource,
-    tsconfig: proj.tsconfigPath ?? null,
+    tsconfig: proj.tsconfigPath ? path.relative(projectRoot, proj.tsconfigPath) : null,
     limitations: buildLimitations(proj.tsconfigPath),
   };
   graph.nodes = graph.nodes.map(stripSelection);

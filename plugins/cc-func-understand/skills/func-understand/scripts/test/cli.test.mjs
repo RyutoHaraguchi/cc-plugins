@@ -28,6 +28,8 @@ test('basic を end-to-end で解析し、スキーマ通りの JSON を出力�
   const g = JSON.parse(fs.readFileSync(out, 'utf8'));
   assert.match(g.meta.tsVersion, /^5\./);
   assert.ok(g.meta.limitations.includes('dynamic-calls'));
+  assert.equal(g.meta.tsconfig, 'tsconfig.json');
+  assert.ok(!path.isAbsolute(g.meta.tsconfig));
   assert.ok(g.target.includes('service.ts#'));
   assert.ok(g.nodes.every((n) => !('_selection' in n)));
   assert.ok(g.nodes.every((n) => ['function','method','arrow','class','module','external-boundary'].includes(n.kind)));
@@ -62,4 +64,12 @@ test('xss fixture のコードが JSON 内にそのまま保持される(エス�
   run(['--project', path.join(here, 'fixtures/xss'), '--function', 'renderPage', '--out', out]);
   const g = JSON.parse(fs.readFileSync(out, 'utf8'));
   assert.ok(g.nodes.find((n) => n.name === 'renderPage').code.includes('</script>'));
+});
+
+test('--max-nodes に数値以外を渡すと exit 1 で明確なエラーを返す', () => {
+  const outPath = tmp();
+  const r = run(['--project', path.join(here, 'fixtures/basic'), '--function', 'getUser', '--max-nodes', 'abc', '--out', outPath]);
+  assert.equal(r.code, 1);
+  assert.match(r.stderr, /--max-nodes/);
+  assert.ok(!fs.existsSync(outPath));
 });
