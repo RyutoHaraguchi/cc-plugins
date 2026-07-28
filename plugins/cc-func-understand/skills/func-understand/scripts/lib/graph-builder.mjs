@@ -22,7 +22,13 @@ function lineOf(sourceFile, pos) {
   return sourceFile.getLineAndCharacterOfPosition(pos).line + 1;
 }
 
-export function buildGraph(ts, proj, targetDecl, opts) {
+/**
+ * buildGraph と addCallbackEdges(Task 5)が共有する可変状態(ノード/エッジの Map、
+ * 外部境界の重複排除、宣言 kind 解決など)をまとめたコンテキストを作る。
+ * 返り値は graph オブジェクトの非列挙プロパティ `_ctx` として保持され、
+ * addCallbackEdges から continueUpstream 経由で再利用される。
+ */
+function createGraphContext(ts, proj, opts) {
   const { projectRoot, maxNodes = 300, upstreamDepth = Infinity, downstreamDepth = Infinity } = opts;
   const nodes = new Map(); // id -> node
   const edges = new Map(); // `${from}->${to}` -> edge (callLines をマージ)
@@ -137,67 +143,120 @@ export function buildGraph(ts, proj, targetDecl, opts) {
     edge.callLines = [...new Set([...edge.callLines, ...lines])].sort((a, b) => a - b);
   };
 
-  const targetItem = prepare(targetDecl.file, targetDecl.selectionStart);
+  return {
+    projectRoot,
+    maxNodes,
+    upstreamDepth,
+    downstreamDepth,
+    nodes,
+    edges,
+    extNodesByKey,
+    declKinds,
+    sourceFileOf,
+    prepare,
+    idOf,
+    kindOf,
+    itemToNode,
+    hasNode,
+    upsertEdge,
+    visitedUp: new Set(),
+    visitedDown: new Set(),
+    truncation: null,
+  };
+}
+
+/** ctx (Map ベースの可変状態) の内容を graph (配列ベースの公開表現)に反映する */
+export function syncGraph(graph) {
+  const ctx = graph._ctx;
+  if (ctx.truncation) {
+    ctx.truncation.upstreamCount = [...ctx.nodes.values()].filter((n) => n.upstreamDistance != null && n.upstreamDistance > 0).length;
+    ctx.truncation.downstreamCount = [...ctx.nodes.values()].filter((n) => n.downstreamDistance != null && n.downstreamDistance > 0).length;
+  }
+  graph.nodes = [...ctx.nodes.values()];
+  graph.edges = [...ctx.edges.values()];
+  graph.truncation = ctx.truncation;
+  return graph;
+}
+
+/**
+ * 片方向(up/down)1ステップ分の Call Hierarchy 展開。buildGraph の交互消費ループと
+ * continueUpstream の両方から呼ばれる共有ロジック。queue に新規ノードを積み、
+ * ctx.nodes/edges/truncation を直接変更する。
+ */
+function stepDirection(ts, proj, ctx, direction, entry, queue) {
+  const { node, item, depth } = entry;
+  const limit = direction === 'up' ? ctx.upstreamDepth : ctx.downstreamDepth;
+  if (depth >= limit || !node.internal) return;
+  const calls =
+    direction === 'up'
+      ? proj.service.provideCallHierarchyIncomingCalls(item.file, item.selectionSpan.start)
+      : proj.service.provideCallHierarchyOutgoingCalls(item.file, item.selectionSpan.start);
+  const visited = direction === 'up' ? ctx.visitedUp : ctx.visitedDown;
+  for (const call of calls ?? []) {
+    const peerItem = direction === 'up' ? call.from : call.to;
+    if (ctx.nodes.size >= ctx.maxNodes && !ctx.hasNode(peerItem)) {
+      ctx.truncation ??= { reason: 'max-nodes', frontier: [] };
+      ctx.truncation.frontier.push(peerItem.name);
+      continue;
+    }
+    const peer = ctx.itemToNode(peerItem, call.fromSpans[0]);
+    const lineSourceFile = ctx.sourceFileOf(direction === 'up' ? peerItem.file : item.file);
+    const lines = lineSourceFile ? call.fromSpans.map((s) => lineOf(lineSourceFile, s.start)) : [];
+    const [from, to] = direction === 'up' ? [peer.id, node.id] : [node.id, peer.id];
+    ctx.upsertEdge(from, to, 'direct-call', lines);
+    if (!visited.has(peer.id)) {
+      visited.add(peer.id);
+      if (peer.internal) {
+        // 外部境界ノードは { id, name, kind, internal:false } の4フィールドのみを保持する
+        // (仕様の interface 節)。distance は内部ノードにのみ付与する。
+        const key = direction === 'up' ? 'upstreamDistance' : 'downstreamDistance';
+        if (peer[key] == null) peer[key] = depth + 1;
+        queue.push({ node: peer, item: peerItem, depth: depth + 1 });
+      }
+    }
+  }
+}
+
+/**
+ * 上流方向(呼び出し元)の Call Hierarchy BFS を `startEntries` から再開/継続する。
+ * addCallbackEdges が新規発見した「参照元の包含関数」ノードからの上流継続に使う。
+ * buildGraph 自身の初回探索は maxNodes 予算の公平性(片方向の高 fan-out 対策)のため
+ * 上下流を交互に1ステップずつ消費する専用ループを使うので、これは呼ばない。
+ * graph._ctx に積まれた nodes/edges Map を直接変更し、最後に graph.nodes/edges/truncation を
+ * 同期して返す。
+ */
+export function continueUpstream(ts, proj, graph, startEntries, opts = {}) {
+  const ctx = graph._ctx;
+  const queue = [...startEntries];
+  for (const entry of queue) ctx.visitedUp.add(entry.node.id);
+  while (queue.length) {
+    stepDirection(ts, proj, ctx, 'up', queue.shift(), queue);
+  }
+  return syncGraph(graph);
+}
+
+export function buildGraph(ts, proj, targetDecl, opts) {
+  const ctx = createGraphContext(ts, proj, opts);
+
+  const targetItem = ctx.prepare(targetDecl.file, targetDecl.selectionStart);
   if (!targetItem) throw new Error('prepareCallHierarchy がターゲットを解決できませんでした');
-  const targetNode = itemToNode(targetItem);
+  const targetNode = ctx.itemToNode(targetItem);
   targetNode.upstreamDistance = 0;
   targetNode.downstreamDistance = 0;
 
-  // 上下流の queue を交互に消費(スペック: 片方向の高 fan-out 対策)
+  const graph = { target: targetNode.id, truncation: null, nodes: [], edges: [] };
+  Object.defineProperty(graph, '_ctx', { value: ctx, enumerable: false, writable: true, configurable: true });
+
+  // 上下流の queue を交互に消費(スペック: 片方向の高 fan-out 対策。maxNodes 予算を
+  // 一方向が独占しないようにする)
   const upQ = [{ node: targetNode, item: targetItem, depth: 0 }];
   const downQ = [{ node: targetNode, item: targetItem, depth: 0 }];
-  const visitedUp = new Set([targetNode.id]);
-  const visitedDown = new Set([targetNode.id]);
-  let truncated = null;
-
-  const step = (queue, direction) => {
-    const { node, item, depth } = queue.shift();
-    const limit = direction === 'up' ? upstreamDepth : downstreamDepth;
-    if (depth >= limit || !node.internal) return;
-    const calls =
-      direction === 'up'
-        ? proj.service.provideCallHierarchyIncomingCalls(item.file, item.selectionSpan.start)
-        : proj.service.provideCallHierarchyOutgoingCalls(item.file, item.selectionSpan.start);
-    for (const call of calls ?? []) {
-      const peerItem = direction === 'up' ? call.from : call.to;
-      if (nodes.size >= maxNodes && !hasNode(peerItem)) {
-        truncated ??= { reason: 'max-nodes', frontier: [] };
-        truncated.frontier.push(peerItem.name);
-        continue;
-      }
-      const peer = itemToNode(peerItem, call.fromSpans[0]);
-      const lineSourceFile = sourceFileOf(direction === 'up' ? peerItem.file : item.file);
-      const lines = lineSourceFile ? call.fromSpans.map((s) => lineOf(lineSourceFile, s.start)) : [];
-      const [from, to] = direction === 'up' ? [peer.id, node.id] : [node.id, peer.id];
-      upsertEdge(from, to, 'direct-call', lines);
-      const visited = direction === 'up' ? visitedUp : visitedDown;
-      if (!visited.has(peer.id)) {
-        visited.add(peer.id);
-        if (peer.internal) {
-          // 外部境界ノードは { id, name, kind, internal:false } の4フィールドのみを保持する
-          // (仕様の interface 節)。distance は内部ノードにのみ付与する。
-          const key = direction === 'up' ? 'upstreamDistance' : 'downstreamDistance';
-          if (peer[key] == null) peer[key] = depth + 1;
-          queue.push({ node: peer, item: peerItem, depth: depth + 1 });
-        }
-      }
-    }
-  };
-
+  ctx.visitedUp.add(targetNode.id);
+  ctx.visitedDown.add(targetNode.id);
   while (upQ.length || downQ.length) {
-    if (upQ.length) step(upQ, 'up');
-    if (downQ.length) step(downQ, 'down');
+    if (upQ.length) stepDirection(ts, proj, ctx, 'up', upQ.shift(), upQ);
+    if (downQ.length) stepDirection(ts, proj, ctx, 'down', downQ.shift(), downQ);
   }
 
-  if (truncated) {
-    truncated.upstreamCount = [...nodes.values()].filter((n) => n.upstreamDistance != null && n.upstreamDistance > 0).length;
-    truncated.downstreamCount = [...nodes.values()].filter((n) => n.downstreamDistance != null && n.downstreamDistance > 0).length;
-  }
-
-  return {
-    target: targetNode.id,
-    truncation: truncated,
-    nodes: [...nodes.values()],
-    edges: [...edges.values()],
-  };
+  return syncGraph(graph);
 }
