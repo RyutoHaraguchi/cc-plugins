@@ -25,13 +25,30 @@ for (const e of graph.edges) {
 // 2. 可視状態管理
 // ============================================================
 // 初期表示: target 本体 + 距離1(上流・下流それぞれ最大20件)のノード。
+// external-boundary ノードは upstreamDistance/downstreamDistance を持たない(スキーマ上
+// id/name/kind/internal のみ)ため、距離判定だけでは target と直結していても拾えない。
+// 「対象関数 ±1 ホップ」は distance ベースの内部ノードだけでなく target とエッジで直結する
+// external-boundary ノードも含む、と解釈し、上限20件は内部ノードと合算でカウントする。
 // 超過分は非表示のまま(集約プレースホルダは作らず、展開ボタンの +N 表示で代替する)。
+function directExternalNeighborIds(dir) {
+  const edges = dir === 'up' ? (inEdges.get(graph.target) ?? []) : (outEdges.get(graph.target) ?? []);
+  const ids = new Set();
+  for (const e of edges) {
+    const neighborId = dir === 'up' ? e.from : e.to;
+    const n = nodesById.get(neighborId);
+    if (n && n.kind === 'external-boundary') ids.add(neighborId);
+  }
+  return [...ids];
+}
+
 const visible = new Set([graph.target]);
 {
-  const upstreamDist1 = graph.nodes.filter((n) => n.upstreamDistance === 1).slice(0, 20);
-  const downstreamDist1 = graph.nodes.filter((n) => n.downstreamDistance === 1).slice(0, 20);
-  for (const n of upstreamDist1) visible.add(n.id);
-  for (const n of downstreamDist1) visible.add(n.id);
+  const upstreamIds = graph.nodes.filter((n) => n.upstreamDistance === 1).map((n) => n.id);
+  const downstreamIds = graph.nodes.filter((n) => n.downstreamDistance === 1).map((n) => n.id);
+  const upstream1 = [...new Set([...upstreamIds, ...directExternalNeighborIds('up')])].slice(0, 20);
+  const downstream1 = [...new Set([...downstreamIds, ...directExternalNeighborIds('down')])].slice(0, 20);
+  for (const id of upstream1) visible.add(id);
+  for (const id of downstream1) visible.add(id);
 }
 
 // ============================================================
