@@ -67,3 +67,49 @@ test('code はノードあたり 16KB で切り詰められる', () => {
     assert.equal(typeof n.codeTruncated, 'boolean');
   }
 });
+
+test('外部境界ノードはシンボル単位で重複排除される(複数の呼び出し元があっても1ノード)', () => {
+  // basic fixture: getUser が直接 basename を呼び、formatName(getUser の下流)も basename を呼ぶ。
+  // 呼び出し元が2つあっても external-boundary ノードは1個に集約されるべき。
+  const g = graphFor('basic', 'getUser');
+  const boundaryNodes = g.nodes.filter((n) => n.kind === 'external-boundary' && n.name === 'basename');
+  assert.equal(boundaryNodes.length, 1, 'basename は1ノードに集約される');
+  const boundary = boundaryNodes[0];
+  const edgesToBoundary = g.edges.filter((e) => e.to === boundary.id);
+  assert.ok(edgesToBoundary.length >= 2, `複数の呼び出し元から同一境界ノードへエッジが張られる(実際: ${edgesToBoundary.length})`);
+  const callers = new Set(edgesToBoundary.map((e) => e.from));
+  assert.ok(callers.has(byName(g, 'getUser').id));
+  assert.ok(callers.has(byName(g, 'formatName').id));
+});
+
+test('kinds: class/method/arrow/module の kind 写像が Call Hierarchy 実物で検証される', () => {
+  // kinds fixture: core() を対象に BFS すると
+  //   上流: arrowCaller(const arrow 関数。CH 自体は kind='function' を返すため AST 上書きが必須)
+  //         module(トップレベルの core() 呼び出し。CH は呼び出し元をファイル自身として返す)
+  //   下流: format(Formatter クラスのメソッド)、Formatter(new Formatter() の呼び出し先としてのクラス)
+  const g = graphFor('kinds', 'core');
+
+  const arrowNode = byName(g, 'arrowCaller');
+  assert.ok(arrowNode, 'arrowCaller が上流ノードとして検出される');
+  assert.equal(arrowNode.kind, 'arrow');
+  assert.equal(arrowNode.upstreamDistance, 1);
+
+  const moduleNode = g.nodes.find((n) => n.kind === 'module');
+  assert.ok(moduleNode, 'モジュールノード(トップレベル呼び出し)が検出される');
+  assert.equal(moduleNode.upstreamDistance, 1);
+  assert.equal(typeof moduleNode.codeTruncated, 'boolean');
+  assert.ok(moduleNode.code.length > 0);
+  // ±10 行抜粋: fixture 自体が16行未満なのでファイル全体が収まる
+  assert.ok(moduleNode.endLine - moduleNode.startLine <= 21);
+
+  const methodNode = byName(g, 'format');
+  assert.ok(methodNode, 'format メソッドが下流ノードとして検出される');
+  assert.equal(methodNode.kind, 'method');
+  assert.equal(methodNode.containerName, 'Formatter');
+  assert.equal(methodNode.downstreamDistance, 1);
+
+  const classNode = byName(g, 'Formatter');
+  assert.ok(classNode, 'Formatter クラスが下流ノードとして検出される(new 呼び出し先)');
+  assert.equal(classNode.kind, 'class');
+  assert.equal(classNode.downstreamDistance, 1);
+});

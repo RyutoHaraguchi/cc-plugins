@@ -27,6 +27,8 @@ export function buildGraph(ts, proj, targetDecl, opts) {
   const nodes = new Map(); // id -> node
   const edges = new Map(); // `${from}->${to}` -> edge (callLines をマージ)
   let extSeq = 0;
+  // 外部境界のシンボル単位重複排除用: `${解決先ファイルパス}::${シンボル名}` -> 既存ノード
+  const extNodesByKey = new Map();
   // arrow 上書き判定用: `${file}#${selectionStart}` -> kind
   const declKinds = new Map(collectDeclarations(ts, proj).map((d) => [`${d.file}#${d.selectionStart}`, d.kind]));
 
@@ -58,9 +60,14 @@ export function buildGraph(ts, proj, targetDecl, opts) {
   const itemToNode = (item, excerptSpan) => {
     const internal = proj.isInternal(item.file);
     if (!internal) {
+      // 同一の解決先ファイル+シンボル名は1ノードに集約する(呼び出し元が複数あっても境界ノードは1個)
+      const extKey = `${item.file}::${item.name}`;
+      const existingExt = extNodesByKey.get(extKey);
+      if (existingExt) return existingExt;
       const id = `${path.basename(item.file)}#ext-${extSeq++}`;
       const node = { id, name: item.name, kind: 'external-boundary', internal: false };
       nodes.set(id, node);
+      extNodesByKey.set(extKey, node);
       return node;
     }
 
@@ -95,7 +102,9 @@ export function buildGraph(ts, proj, targetDecl, opts) {
 
     const node = {
       id,
-      name: item.name,
+      // module kind の item.name は TS が絶対パスをそのまま返す(観測済み)。
+      // 他ノードとの整合(file は相対パス)と絶対パス非漏洩のため relFile に差し替える。
+      name: kind === 'module' ? relFile : item.name,
       containerName: item.containerName || undefined,
       kind,
       internal: true,
@@ -114,7 +123,7 @@ export function buildGraph(ts, proj, targetDecl, opts) {
   };
 
   const hasNode = (item) => {
-    if (!proj.isInternal(item.file)) return false; // 境界ノードは常に新規
+    if (!proj.isInternal(item.file)) return extNodesByKey.has(`${item.file}::${item.name}`); // 同一外部シンボルは既存扱い
     return nodes.has(idOf(item));
   };
 
