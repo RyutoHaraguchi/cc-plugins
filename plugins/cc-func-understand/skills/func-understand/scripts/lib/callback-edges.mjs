@@ -158,7 +158,7 @@ export function addCallbackEdges(ts, proj, graph, opts) {
         if (!alreadyExists) {
           enqueue(fromNode);
           if (fromItem && fromNode.internal) {
-            continueUpstream(ts, proj, graph, [{ node: fromNode, item: fromItem, depth: fromNode.upstreamDistance ?? 0 }], opts);
+            continueUpstream(ts, proj, graph, [{ node: fromNode, item: fromItem, depth: fromNode.upstreamDistance ?? 0 }]);
             for (const n of ctx.nodes.values()) enqueue(n);
           }
         }

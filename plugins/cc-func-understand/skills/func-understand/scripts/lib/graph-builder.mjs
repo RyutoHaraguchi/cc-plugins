@@ -31,7 +31,7 @@ function lineOf(sourceFile, pos) {
 function createGraphContext(ts, proj, opts) {
   const { projectRoot, maxNodes = 300, upstreamDepth = Infinity, downstreamDepth = Infinity } = opts;
   const nodes = new Map(); // id -> node
-  const edges = new Map(); // `${from}->${to}` -> edge (callLines をマージ)
+  const edges = new Map(); // `${from}->${to}#${kind}` -> edge (callLines をマージ)
   let extSeq = 0;
   // 外部境界のシンボル単位重複排除用: `${解決先ファイルパス}::${シンボル名}` -> 既存ノード
   const extNodesByKey = new Map();
@@ -133,8 +133,11 @@ function createGraphContext(ts, proj, opts) {
     return nodes.has(idOf(item));
   };
 
+  // kind をキーに含める: 同一ペア(from,to)が direct-call と callback-passed の
+  // 両方を持つケース(例: 同じ関数がある行で直接呼び出しつつ、別の行で名前渡しもする)で
+  // 一方がもう一方を上書き/吸収してしまわないようにする(edge-kind 衝突対策)。
   const upsertEdge = (from, to, kind, lines) => {
-    const key = `${from}->${to}`;
+    const key = `${from}->${to}#${kind}`;
     let edge = edges.get(key);
     if (!edge) {
       edge = { from, to, kind, callLines: [] };
@@ -225,7 +228,7 @@ function stepDirection(ts, proj, ctx, direction, entry, queue) {
  * graph._ctx に積まれた nodes/edges Map を直接変更し、最後に graph.nodes/edges/truncation を
  * 同期して返す。
  */
-export function continueUpstream(ts, proj, graph, startEntries, opts = {}) {
+export function continueUpstream(ts, proj, graph, startEntries) {
   const ctx = graph._ctx;
   const queue = [...startEntries];
   for (const entry of queue) ctx.visitedUp.add(entry.node.id);

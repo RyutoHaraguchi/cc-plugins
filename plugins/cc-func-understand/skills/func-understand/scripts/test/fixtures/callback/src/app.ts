@@ -14,3 +14,8 @@ export function setupRoutes(): void {
 export function processAll(ids: string[]): string[] {
   return ids.map(itemHandler);             // 高階関数への名前渡し
 }
+
+export function mixedUsage(): void {
+  itemHandler("direct");            // 直接呼び出し(direct-call)
+  register("/mixed", itemHandler);  // 名前渡し(callback-passed、別行)
+}
