@@ -20,10 +20,20 @@ function findNodeAt(ts, sourceFile, pos) {
   return result;
 }
 
-/** 参照位置の祖先に ImportDeclaration/ExportDeclaration があるか */
+/**
+ * 参照位置の祖先に ImportDeclaration/ExportDeclaration/ExportAssignment があるか。
+ * ExportAssignment (`export default X;` / `export = X;`) も `export { X }` と同様に
+ * 単なる再エクスポートであり、関数参照をコールバックとして受け渡す行為ではないため除外する。
+ */
 function isInImportOrExport(ts, node) {
   for (let n = node; n; n = n.parent) {
-    if (ts.isImportDeclaration(n) || ts.isExportDeclaration(n) || ts.isImportEqualsDeclaration(n)) return true;
+    if (
+      ts.isImportDeclaration(n) ||
+      ts.isExportDeclaration(n) ||
+      ts.isImportEqualsDeclaration(n) ||
+      ts.isExportAssignment(n)
+    )
+      return true;
   }
   return false;
 }

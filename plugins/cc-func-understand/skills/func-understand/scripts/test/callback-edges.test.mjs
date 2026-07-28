@@ -59,6 +59,17 @@ test('新規発見ノード(setupRoutes/boot)は upstreamDistance と _selection
   assert.equal(typeof boot._selection?.start, 'number');
 });
 
+test('`export default X;` は単なる再エクスポートであり callback-passed エッジを生まない', () => {
+  const projectRoot = path.join(here, 'fixtures/export-default');
+  const proj = loadProject(ts, projectRoot);
+  const r = resolveTarget(ts, proj, { functionName: 'helper' }, projectRoot);
+  const g = addCallbackEdges(ts, proj, buildGraph(ts, proj, r.declaration, { projectRoot }), { projectRoot });
+  assert.ok(
+    !g.edges.some((e) => e.kind === 'callback-passed'),
+    '`export default helper;` は関数参照の受け渡しではなく再エクスポートなので callback-passed 扱いにならないべき',
+  );
+});
+
 test('同一関数が同じ対象を直接呼び出しと名前渡しの両方で行っても direct-call と callback-passed が共存する(edge-kind 衝突しない)', () => {
   const g = fullGraph('itemHandler');
   const mixed = byName(g, 'mixedUsage');
