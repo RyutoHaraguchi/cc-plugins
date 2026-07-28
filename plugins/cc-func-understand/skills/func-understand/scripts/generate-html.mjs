@@ -51,12 +51,14 @@ function readLibraryScripts() {
   const cytoscapeDagreDir = resolvePkgDir('cytoscape-dagre');
   const hljsDir = resolvePkgDir('@highlightjs/cdn-assets');
 
+  // @highlightjs/cdn-assets の highlight.min.js は "common" バンドルであり、
+  // typescript / javascript を含む主要言語がこの1ファイルに既に登録済み(vm サンドボックスで実測確認済み)。
+  // そのため languages/typescript.min.js を別途インラインする必要はない(登録すれば無害だが冗長)。
   const files = [
     path.join(cytoscapeDir, 'dist', 'cytoscape.min.js'),
     path.join(dagreDir, 'dist', 'dagre.min.js'),
     path.join(cytoscapeDagreDir, 'cytoscape-dagre.js'),
     path.join(hljsDir, 'highlight.min.js'),
-    path.join(hljsDir, 'languages', 'typescript.min.js'),
   ];
 
   return { files, hljsDir };
@@ -90,19 +92,43 @@ function escapeHtmlText(str) {
     .replaceAll('"', '&quot;');
 }
 
+const PLACEHOLDER_PATTERN = /<!--__(TITLE|LIBS|CSS|APP|DATA)__-->/g;
+
 /**
  * viewer.html テンプレートのプレースホルダを埋める。
- * String.prototype.replace はドル記号を特殊解釈するため、必ず置換関数を使う。
+ *
+ * 単一の正規表現で一括置換する(逐次 `.replace()` チェーンにしない)。逐次チェーンだと、
+ * 例えば TITLE を埋めた「結果の文字列」の中に `<!--__LIBS__-->` のような後続プレースホルダと
+ * 同じ文字列がたまたま含まれていた場合、次の `.replace()` がそれを誤って再置換してしまう
+ * (ライブラリ本体や viewer.js/viewer.css の内容は外部由来かつ将来変更されうるため、
+ * この再スキャン問題を構造的に防ぐ)。`String.prototype.replace` はグローバル正規表現を
+ * 使っても元の文字列に対して1回だけスキャンし、置換後の内容を再スキャンしないため安全。
+ *
+ * また、置換関数(`(match, name) => ...`)を使うことで `$&` 等のドル記号特殊解釈も回避する。
  */
 export function renderHtml({ template, css, appJs, libsJs, libsCss, graphJson, title }) {
   const dataScript = `<script type="application/json" id="graph-data">${escapeJsonForScript(graphJson)}</script>`;
 
-  return template
-    .replace('<!--__TITLE__-->', () => escapeHtmlText(title))
-    .replace('<!--__CSS__-->', () => `${libsCss}\n${css}`)
-    .replace('<!--__DATA__-->', () => dataScript)
-    .replace('<!--__LIBS__-->', () => libsJs)
-    .replace('<!--__APP__-->', () => appJs);
+  const values = {
+    TITLE: escapeHtmlText(title),
+    CSS: `${libsCss}\n${css}`,
+    DATA: dataScript,
+    LIBS: libsJs,
+    APP: appJs,
+  };
+
+  const seen = new Set();
+  const html = template.replace(PLACEHOLDER_PATTERN, (_match, name) => {
+    seen.add(name);
+    return values[name];
+  });
+
+  const missing = Object.keys(values).filter((name) => !seen.has(name));
+  if (missing.length > 0) {
+    throw new Error(`テンプレートに未置換のプレースホルダがあります: ${missing.join(', ')}`);
+  }
+
+  return html;
 }
 
 export async function main(argv) {
