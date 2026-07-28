@@ -29,23 +29,40 @@ function isInImportOrExport(ts, node) {
 }
 
 /**
- * 参照位置の Identifier(または PropertyAccessExpression チェーン)が、
- * `export default X;` / `export default a.b.X;` のように ExportAssignment の
- * expression **そのもの**であるかを判定する。
+ * 参照位置の Identifier(または PropertyAccessExpression チェーン、および
+ * 括弧・as・非null断言・satisfies によるラップ)が、`export default X;` /
+ * `export default a.b.X;` / `export default (X);` / `export default X as Y;` /
+ * `export default X!;` のように ExportAssignment の expression **そのもの**
+ * (透過的なラッパーを剥がした上で)であるかを判定する。
  *
  * これは「単なる再エクスポート」だけを対象にするための狭い判定であり、祖先を
  * 遡って ExportAssignment の存在有無だけを見ると `export default connect(helper)`
  * のような式(HOC 等に名前を渡す正当なコールバック渡し)まで巻き込んで除外して
- * しまう(過剰一般化)。そのため PropertyAccessExpression チェーンを1段ずつ
- * 遡った直後の親が ExportAssignment であり、かつそのノードが
+ * しまう(過剰一般化)。そのため以下の2種類のみを「透過」として1段ずつ遡る:
+ *   - PropertyAccessExpression: 親側(`a.b.X` の `X` から見て `a.b.X` 全体が親)
+ *   - ParenthesizedExpression/AsExpression/NonNullExpression/SatisfiesExpression:
+ *     いずれも「ラッパー.expression === 自分」の場合のみ遡る(型注釈や断言の
+ *     対象そのものである場合に限る。例えば `(a as B).c` の `a` は `AsExpression`
+ *     の expression だが、その外側はさらに PropertyAccessExpression なので
+ *     結局2種類のループで両方剥がされる)。
+ * 上記いずれにも当てはまらず、直後の親が ExportAssignment かつ
  * ExportAssignment.expression と一致する場合のみ true を返す。
  * `export default connect(helper)` の `helper` は親が CallExpression の引数
- * であり ExportAssignment ではないため、この関数は false を返す(=除外されず
- * 従来どおり callback-passed として検出される)。
+ * であり、CallExpression はここでの透過対象に含まれないため、この関数は
+ * false を返す(=除外されず従来どおり callback-passed として検出される)。
  */
 function isExportAssignmentTarget(ts, node) {
   let n = node;
-  while (n.parent && ts.isPropertyAccessExpression(n.parent)) n = n.parent;
+  while (
+    n.parent &&
+    (ts.isPropertyAccessExpression(n.parent) ||
+      ((ts.isParenthesizedExpression(n.parent) ||
+        ts.isAsExpression(n.parent) ||
+        ts.isNonNullExpression(n.parent) ||
+        (ts.isSatisfiesExpression?.(n.parent) ?? false)) &&
+        n.parent.expression === n))
+  )
+    n = n.parent;
   return Boolean(n.parent && ts.isExportAssignment(n.parent) && n.parent.expression === n);
 }
 

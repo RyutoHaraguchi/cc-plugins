@@ -70,6 +70,28 @@ test('`export default X;` は単なる再エクスポートであり callback-pa
   );
 });
 
+test('`export default (X);` のように括弧でラップされた裸の再エクスポートも callback-passed エッジを生まない', () => {
+  const projectRoot = path.join(here, 'fixtures/export-default');
+  const proj = loadProject(ts, projectRoot);
+  const r = resolveTarget(ts, proj, { functionName: 'helper2' }, projectRoot);
+  const g = addCallbackEdges(ts, proj, buildGraph(ts, proj, r.declaration, { projectRoot }), { projectRoot });
+  assert.ok(
+    !g.edges.some((e) => e.kind === 'callback-passed'),
+    '`export default (helper2);` は ParenthesizedExpression で包まれているだけの再エクスポートなので callback-passed 扱いにならないべき',
+  );
+});
+
+test('`export default X as Y;` のように as でラップされた裸の再エクスポートも callback-passed エッジを生まない', () => {
+  const projectRoot = path.join(here, 'fixtures/export-default');
+  const proj = loadProject(ts, projectRoot);
+  const r = resolveTarget(ts, proj, { functionName: 'helper3' }, projectRoot);
+  const g = addCallbackEdges(ts, proj, buildGraph(ts, proj, r.declaration, { projectRoot }), { projectRoot });
+  assert.ok(
+    !g.edges.some((e) => e.kind === 'callback-passed'),
+    '`export default helper3 as unknown;` は AsExpression で包まれているだけの再エクスポートなので callback-passed 扱いにならないべき',
+  );
+});
+
 test('`export default connect(helper)` のように式内で名前渡しされる場合は callback-passed エッジが生成される(export 判定の過剰一般化防止)', () => {
   const projectRoot = path.join(here, 'fixtures/export-default-hoc');
   const proj = loadProject(ts, projectRoot);
