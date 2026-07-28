@@ -39,6 +39,8 @@ test('②展開操作で表示ノード数が増える', async ({ page }) => {
   await page.goto(generate('callback', 'itemHandler'));
   const before = await page.evaluate(() => window.__cy.nodes().length);
   await page.click('#expand-all');
+  // render() は同期的だが、フレーク耐性のため条件ベースで待つ(タイムアウト待ちにしない)。
+  await page.waitForFunction((n) => window.__cy.nodes().length > n, before);
   const after = await page.evaluate(() => window.__cy.nodes().length);
   expect(after).toBeGreaterThan(before);
   const bootVisible = await page.evaluate(() =>
@@ -52,7 +54,7 @@ test('②展開操作で表示ノード数が増える', async ({ page }) => {
 test('③検索でノードにフォーカスする', async ({ page }) => {
   await page.goto(generate('callback', 'itemHandler'));
   await page.fill('#search', 'boot');
-  await page.waitForTimeout(300);
+  await page.waitForFunction(() => window.__cy.$('.search-hit').length > 0);
   const hit = await page.evaluate(() => window.__cy.$('.search-hit').length);
   expect(hit).toBeGreaterThan(0);
 });
@@ -60,6 +62,11 @@ test('③検索でノードにフォーカスする', async ({ page }) => {
 test('④XSS fixture のコードが実行されない', async ({ page }) => {
   await page.goto(generate('xss', 'renderPage'));
   await page.evaluate(() => window.__showDetail(window.__graphTargetId)); // コードを詳細パネルに表示させる
+  // showDetail が早期リターンした場合(id 解決失敗など)でも __xss_executed は
+  // 自明に undefined になり検証を素通りしてしまうため、まず「注入ベクターを含む
+  // コードが実際に詳細パネルへ描画された」ことを正のアサーションで確認してから
+  // 実行されていないことを確認する。
+  await expect(page.locator('#detail pre code')).toContainText('__xss_executed');
   const executed = await page.evaluate(() => window.__xss_executed);
   expect(executed).toBeUndefined();
 });
