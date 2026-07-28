@@ -70,6 +70,17 @@ test('`export default X;` は単なる再エクスポートであり callback-pa
   );
 });
 
+test('`export default connect(helper)` のように式内で名前渡しされる場合は callback-passed エッジが生成される(export 判定の過剰一般化防止)', () => {
+  const projectRoot = path.join(here, 'fixtures/export-default-hoc');
+  const proj = loadProject(ts, projectRoot);
+  const r = resolveTarget(ts, proj, { functionName: 'helper' }, projectRoot);
+  const g = addCallbackEdges(ts, proj, buildGraph(ts, proj, r.declaration, { projectRoot }), { projectRoot });
+  assert.ok(
+    g.edges.some((e) => e.kind === 'callback-passed'),
+    'connect(helper) の helper は HOC への正当な名前渡しであり、export default の裸の再エクスポートと混同して除外してはならない',
+  );
+});
+
 test('同一関数が同じ対象を直接呼び出しと名前渡しの両方で行っても direct-call と callback-passed が共存する(edge-kind 衝突しない)', () => {
   const g = fullGraph('itemHandler');
   const mixed = byName(g, 'mixedUsage');

@@ -20,22 +20,33 @@ function findNodeAt(ts, sourceFile, pos) {
   return result;
 }
 
-/**
- * 参照位置の祖先に ImportDeclaration/ExportDeclaration/ExportAssignment があるか。
- * ExportAssignment (`export default X;` / `export = X;`) も `export { X }` と同様に
- * 単なる再エクスポートであり、関数参照をコールバックとして受け渡す行為ではないため除外する。
- */
+/** 参照位置の祖先に ImportDeclaration/ExportDeclaration/ImportEqualsDeclaration があるか */
 function isInImportOrExport(ts, node) {
   for (let n = node; n; n = n.parent) {
-    if (
-      ts.isImportDeclaration(n) ||
-      ts.isExportDeclaration(n) ||
-      ts.isImportEqualsDeclaration(n) ||
-      ts.isExportAssignment(n)
-    )
-      return true;
+    if (ts.isImportDeclaration(n) || ts.isExportDeclaration(n) || ts.isImportEqualsDeclaration(n)) return true;
   }
   return false;
+}
+
+/**
+ * 参照位置の Identifier(または PropertyAccessExpression チェーン)が、
+ * `export default X;` / `export default a.b.X;` のように ExportAssignment の
+ * expression **そのもの**であるかを判定する。
+ *
+ * これは「単なる再エクスポート」だけを対象にするための狭い判定であり、祖先を
+ * 遡って ExportAssignment の存在有無だけを見ると `export default connect(helper)`
+ * のような式(HOC 等に名前を渡す正当なコールバック渡し)まで巻き込んで除外して
+ * しまう(過剰一般化)。そのため PropertyAccessExpression チェーンを1段ずつ
+ * 遡った直後の親が ExportAssignment であり、かつそのノードが
+ * ExportAssignment.expression と一致する場合のみ true を返す。
+ * `export default connect(helper)` の `helper` は親が CallExpression の引数
+ * であり ExportAssignment ではないため、この関数は false を返す(=除外されず
+ * 従来どおり callback-passed として検出される)。
+ */
+function isExportAssignmentTarget(ts, node) {
+  let n = node;
+  while (n.parent && ts.isPropertyAccessExpression(n.parent)) n = n.parent;
+  return Boolean(n.parent && ts.isExportAssignment(n.parent) && n.parent.expression === n);
 }
 
 /**
@@ -128,6 +139,7 @@ export function addCallbackEdges(ts, proj, graph, opts) {
         const refNode = findNodeAt(ts, refSf, ref.textSpan.start);
         if (!refNode) continue;
         if (isInImportOrExport(ts, refNode)) continue;
+        if (isExportAssignmentTarget(ts, refNode)) continue;
         if (isCallExpressionCallee(ts, refSf, ref.textSpan.start)) continue;
 
         const refLine = lineOf(refSf, ref.textSpan.start);
