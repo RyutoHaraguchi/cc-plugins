@@ -2,6 +2,7 @@
 import { parseArgs } from 'node:util';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { loadTypeScript } from './lib/ts-loader.mjs';
 import { loadProject } from './lib/project-loader.mjs';
@@ -27,17 +28,22 @@ function parseCliArgs(argv) {
   return values;
 }
 
-function buildLimitations(tsconfigPath) {
+/**
+ * tsconfig を JSONC 対応(コメント・末尾カンマ許容)で読み込んで references の有無を判定する。
+ * 実プロジェクトの tsconfig はコメント/末尾カンマを含むことが多く、素の JSON.parse では
+ * 黙って失敗し project-references 検出が漏れるため、project-loader.mjs と同じ
+ * `ts.readConfigFile`(TypeScript 本体の JSONC パーサ)を再利用する。
+ */
+function buildLimitations(ts, tsconfigPath) {
   const limitations = ['dynamic-calls'];
   if (tsconfigPath) {
     try {
-      const raw = fs.readFileSync(tsconfigPath, 'utf8');
-      const json = JSON.parse(raw);
-      if (json && Object.prototype.hasOwnProperty.call(json, 'references')) {
+      const { config, error } = ts.readConfigFile(tsconfigPath, ts.sys.readFile);
+      if (!error && config && Object.prototype.hasOwnProperty.call(config, 'references')) {
         limitations.push('project-references');
       }
     } catch {
-      // tsconfig が読めない/JSON として不正な場合は project-references 判定をスキップする
+      // tsconfig が読めない場合は project-references 判定をスキップする
     }
   }
   return limitations;
@@ -69,6 +75,13 @@ export async function main(argv) {
   const { ts, source: tsSource, version: tsVersion } = loadTypeScript(projectRoot);
   const proj = loadProject(ts, projectRoot, args.tsconfig);
 
+  if (proj.fileNames.length === 0) {
+    throw new Error(
+      'tsconfig が solution-style(files: [] + references のみ)の可能性があります。' +
+        '--tsconfig で参照先の設定を指定して再実行してください(例: --tsconfig tsconfig.app.json)。'
+    );
+  }
+
   const line = parseIntOption('--line', args.line);
   const resolution = resolveTarget(ts, proj, { functionName: args.function, file: args.file, line }, projectRoot);
 
@@ -99,7 +112,7 @@ export async function main(argv) {
     tsVersion,
     tsSource,
     tsconfig: proj.tsconfigPath ? path.relative(projectRoot, proj.tsconfigPath) : null,
-    limitations: buildLimitations(proj.tsconfigPath),
+    limitations: buildLimitations(ts, proj.tsconfigPath),
   };
   graph.nodes = graph.nodes.map(stripSelection);
   delete graph._ctx;
@@ -112,7 +125,10 @@ export async function main(argv) {
   );
 }
 
-main(process.argv.slice(2)).catch((e) => {
-  console.error(e.message);
-  process.exitCode = 1;
-});
+const isMainModule = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (isMainModule) {
+  main(process.argv.slice(2)).catch((e) => {
+    console.error(e.message);
+    process.exitCode = 1;
+  });
+}

@@ -73,3 +73,21 @@ test('--max-nodes に数値以外を渡すと exit 1 で明確なエラーを返
   assert.match(r.stderr, /--max-nodes/);
   assert.ok(!fs.existsSync(outPath));
 });
+
+test('コメント・末尾カンマ入りの tsconfig でも references を検出し limitations に project-references が入る', () => {
+  const out = tmp();
+  const r = run(['--project', path.join(here, 'fixtures/jsonc-refs'), '--function', 'getUser', '--out', out]);
+  assert.equal(r.code, 0);
+  const g = JSON.parse(fs.readFileSync(out, 'utf8'));
+  assert.ok(g.meta.limitations.includes('project-references'));
+});
+
+test('solution-style tsconfig(files: [] + references)は exit 1 で --tsconfig の指定を促す', () => {
+  const outPath = tmp();
+  const r = run(['--project', path.join(here, 'fixtures/solution-style'), '--function', 'getUser', '--out', outPath]);
+  assert.equal(r.code, 1);
+  assert.match(r.stderr, /solution-style/);
+  assert.match(r.stderr, /--tsconfig/);
+  assert.ok(!fs.existsSync(outPath));
+});
+
