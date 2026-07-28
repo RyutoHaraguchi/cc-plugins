@@ -1,0 +1,19 @@
+{
+  "name": "cc-func-understand-scripts",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "typescript": "~5.9.3",
+    "cytoscape": "3.30.4",
+    "dagre": "0.8.5",
+    "cytoscape-dagre": "2.5.0",
+    "highlight.js": "11.11.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.49.1"
+  },
+  "scripts": {
+    "test": "node --test test/",
+    "test:smoke": "playwright test test/smoke.spec.mjs"
+  }
+}
