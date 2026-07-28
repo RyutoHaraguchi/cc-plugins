@@ -3,11 +3,11 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "typescript": "~5.9.3",
+    "@highlightjs/cdn-assets": "11.11.1",
     "cytoscape": "3.30.4",
-    "dagre": "0.8.5",
     "cytoscape-dagre": "2.5.0",
-    "highlight.js": "11.11.1"
+    "dagre": "0.8.5",
+    "typescript": "~5.9.3"
   },
   "devDependencies": {
     "@playwright/test": "1.49.1"
