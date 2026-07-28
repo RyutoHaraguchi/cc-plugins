@@ -51,15 +51,12 @@ function registerDagreLayout() {
   }
 }
 
+// 展開可能性の提示は詳細パネルの「上流/下流を展開 (+N)」ボタンが担う。
+// ラベル上のバッジ表示は brief 外の追加であり、全可視ノード×毎 render で expandable() を
+// 余分に呼ぶコストと解釈リスクだけが残るため設けない(YAGNI)。
 function nodeLabel(id) {
   const n = nodesById.get(id);
-  const baseName = n.containerName ? `${n.containerName}.${n.name}` : n.name;
-  const upCount = expandable(id, 'up').length;
-  const downCount = expandable(id, 'down').length;
-  const badges = [];
-  if (upCount > 0) badges.push(`▸${upCount}`); // ▸N
-  if (downCount > 0) badges.push(`${downCount}◂`); // N◂
-  return badges.length > 0 ? `${baseName} ${badges.join(' ')}` : baseName;
+  return n.containerName ? `${n.containerName}.${n.name}` : n.name;
 }
 
 function buildElements() {
@@ -115,7 +112,7 @@ const CY_STYLE = [
   },
   {
     selector: 'node[kind="external-boundary"]',
-    style: { 'border-style': 'dashed', 'background-color': '#161b22', color: '#8b949e' },
+    style: { 'border-style': 'dotted', 'background-color': '#161b22', color: '#8b949e' },
   },
   {
     selector: 'node.is-target',
@@ -202,6 +199,10 @@ function expandable(id, dir) {
 function expand(id, dir) {
   const ids = expandable(id, dir).slice(0, 20);
   if (ids.length === 0) return;
+  // render() は要素を全再構築するため on-path は黙って消える。select だけが選択状態のまま
+  // 残ると UI が嘘をつくことになるので、展開前に経路ハイライトの状態も揃えてリセットする。
+  clearOnPath();
+  if (entrySelect) entrySelect.value = '';
   for (const nid of ids) visible.add(nid);
   render();
 }
@@ -511,6 +512,8 @@ function buildBanner() {
 // 10. 全展開ボタン
 // ============================================================
 function expandAll() {
+  clearOnPath();
+  if (entrySelect) entrySelect.value = '';
   for (const n of graph.nodes) visible.add(n.id);
   render();
 }
