@@ -16,6 +16,8 @@ description: Use when the user invokes /func-understand or asks to visualize a f
 3. AI 要約(グラフ JSON に summary を埋める)
 4. HTML 生成(`generate-html.mjs`)
 
+以下、`<skill>` はこの SKILL.md が置かれているディレクトリの絶対パスを指す(スキル起動時に提示される "Base directory for this skill" のパス。それを参照する)。
+
 ## 1. 前提確認
 
 - 対象は TS/JS プロジェクトのみ。対象ディレクトリが TS/JS プロジェクトでない場合はその旨を伝えて中断する。
@@ -35,7 +37,7 @@ node <skill>/scripts/analyze-callgraph.mjs \
 
 stdout の JSON と exit code で分岐する:
 
-- **exit 2, `status: "ambiguous"`**: `candidates` の各要素をラベル `relFile:startLine (containerName)` として AskUserQuestion で提示し、ユーザーに選ばせる。選択された候補の `relFile` と `startLine` を `--file` `--line` として付与し、同じコマンドを再実行する。
+- **exit 2, `status: "ambiguous"`**: `candidates` の各要素をラベル `relFile:startLine (containerName)` として AskUserQuestion で提示し、ユーザーに選ばせる。`containerName` が null/未設定の候補は括弧部分を省略し `relFile:startLine` とする。AskUserQuestion の `label` はこの短いラベルのみにとどめ、`signature` など詳細情報は `description` 側に入れる。選択された候補の `relFile` と `startLine` を `--file` `--line` として付与し、同じコマンドを再実行する。
 - **exit 2, `status: "not-found"`**: `suggestions` を提示し、関数名の再入力を促す(AskUserQuestion または自由入力での確認)。
 - **exit 0, `status: "ok"`**:
   - `truncated: true` の場合、生成自体は続行してよいが、最終報告時に「グラフが `--max-nodes` 等の上限で打ち切られたため、`--upstream-depth`/`--downstream-depth` を指定して再実行すると全体像を確認できる」旨を提案する。
@@ -52,7 +54,7 @@ min(upstreamDistance ?? Infinity, downstreamDistance ?? Infinity) <= 2  かつ  
 
 - 各対象ノードに、そのコードを読んで 1〜3 行の日本語要約を作成し、ノードの `summary` フィールドに埋める。
 - 対象ノードが **30 を超える**場合は、Task tool のサブエージェントに分割して要約させる(1 エージェントあたり最大 30 ノード)。各サブエージェントには対象ノードの `id` / `name` / `code` のみを渡し、`{ "id": "summary text", ... }` 形式の JSON を返させる。返ってきた要約をノードにマージする。
-- **対象範囲外のノード(距離 2 超、または external/boundary ノード)の `summary` には一切触れない**。null のまま残す。
+- **対象範囲外のノードには一切触れない**: 距離 2 超の内部ノードは `summary` を `null` のまま変更しない。external/boundary ノード(`internal: false`)にはそもそも `summary` キー自体が存在しない(graph-builder が付与しない)ため、追加してはならない。
 - 要約を埋め終えたら graph.json を同じパスに上書き保存する。
 
 ## 4. HTML 生成
