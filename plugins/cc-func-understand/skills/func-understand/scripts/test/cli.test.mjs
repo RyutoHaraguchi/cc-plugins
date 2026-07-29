@@ -122,3 +122,27 @@ test('test-exclusion: --test-exclude の明示パスが存在しなければ exi
   assert.match(r.stderr, /--test-exclude/);
 });
 
+test('test-exclusion: --test-exclude が壊れた JSON を指すと warning を出し除外なしで解析する', () => {
+  const brokenConfig = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'cfu-')), 'broken.json');
+  fs.writeFileSync(brokenConfig, '{ this is not json');
+  const out = tmp();
+  const r = run(['--project', path.join(here, 'fixtures/test-exclusion'), '--function', 'createWidget', '--test-exclude', brokenConfig, '--out', out]);
+  assert.equal(r.code, 0);
+  assert.match(r.stderr, /不正な JSON/);
+  const g = JSON.parse(fs.readFileSync(out, 'utf8'));
+  const names = g.nodes.map((n) => n.name);
+  assert.ok(names.includes('callInTest'), '除外設定が壊れているため除外なしで解析される');
+});
+
+test('test-exclusion: --include-tests + 壊れた --test-exclude では定義ファイルを一切読まず warning も出ない', () => {
+  const brokenConfig = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'cfu-')), 'broken.json');
+  fs.writeFileSync(brokenConfig, '{ this is not json');
+  const out = tmp();
+  const r = run(['--project', path.join(here, 'fixtures/test-exclusion'), '--function', 'createWidget', '--include-tests', '--test-exclude', brokenConfig, '--out', out]);
+  assert.equal(r.code, 0);
+  assert.equal(r.stderr, '', '--include-tests は定義ファイル自体を読まないため warning も出ない');
+  const g = JSON.parse(fs.readFileSync(out, 'utf8'));
+  const names = g.nodes.map((n) => n.name);
+  assert.ok(names.includes('callInTest'));
+});
+
