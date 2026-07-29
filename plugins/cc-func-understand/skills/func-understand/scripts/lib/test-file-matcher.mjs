@@ -7,6 +7,9 @@
  * npm の glob 実装は使わない(スクリプトのランタイム依存ゼロ維持)。
  */
 
+import fs from 'node:fs';
+import path from 'node:path';
+
 const REGEX_SPECIALS = /[.+^$()|[\]\\]/g;
 
 /** 1 セグメント分の glob(`**` 以外)を正規表現文字列へ変換する */
@@ -55,5 +58,40 @@ export function createMatcher(globs) {
   return (relPath) => {
     const p = relPath.replaceAll('\\', '/').replace(/^\.\//, '');
     return regexps.some((r) => r.test(p));
+  };
+}
+
+/**
+ * `.func-understand.json` から testExclude 配列を読み込む。
+ * 「除外なし」への劣化は安全側(ノードが余計に出るだけ)なので、
+ * ファイル無し・キー無し・型不一致は警告なしで null を返し、
+ * 不正 JSON のみ warning を返す(ユーザーの編集ミスに気付けるように)。
+ */
+export function loadTestExclusions(configPath) {
+  let raw;
+  try {
+    raw = fs.readFileSync(configPath, 'utf8');
+  } catch {
+    return { globs: null };
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return { globs: null, warning: `${configPath} が不正な JSON のため、テスト除外なしで解析します` };
+  }
+  const globs = parsed?.testExclude;
+  if (!Array.isArray(globs) || !globs.every((g) => typeof g === 'string')) {
+    return { globs: null };
+  }
+  return { globs };
+}
+
+export function createFileExcluder(projectRoot, globs) {
+  const matcher = createMatcher(globs);
+  return (absPath) => {
+    const rel = path.relative(projectRoot, absPath).replaceAll('\\', '/');
+    if (rel === '' || rel.startsWith('..')) return false; // projectRoot 外・自身は対象にしない
+    return matcher(rel);
   };
 }

@@ -1,6 +1,9 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { globToRegExp, createMatcher } from '../lib/test-file-matcher.mjs';
+import { globToRegExp, createMatcher, loadTestExclusions, createFileExcluder } from '../lib/test-file-matcher.mjs';
 
 test('globToRegExp: * はセグメント内のみにマッチする', () => {
   assert.ok(globToRegExp('*.ts').test('a.ts'));
@@ -53,4 +56,42 @@ test('createMatcher: 複数パターンのいずれかにマッチし、パス�
   assert.ok(m('src\\a\\foo.test.ts'), 'Windows 区切りでも判定できる');
   assert.ok(m('./src/a/foo.test.ts'), '先頭 ./ を無視する');
   assert.ok(!m('src/a/foo.ts'));
+});
+
+const tmpConfig = (content) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cfu-matcher-'));
+  const p = path.join(dir, '.func-understand.json');
+  if (content != null) fs.writeFileSync(p, content);
+  return p;
+};
+
+test('loadTestExclusions: ファイルが無ければ globs null(警告なし)', () => {
+  const r = loadTestExclusions(tmpConfig(null));
+  assert.equal(r.globs, null);
+  assert.equal(r.warning, undefined);
+});
+
+test('loadTestExclusions: 不正 JSON は warning 付きで globs null', () => {
+  const r = loadTestExclusions(tmpConfig('{ oops'));
+  assert.equal(r.globs, null);
+  assert.match(r.warning, /不正な JSON/);
+});
+
+test('loadTestExclusions: testExclude が文字列配列でなければ globs null', () => {
+  assert.equal(loadTestExclusions(tmpConfig('{}')).globs, null);
+  assert.equal(loadTestExclusions(tmpConfig('{"testExclude": "x"}')).globs, null);
+  assert.equal(loadTestExclusions(tmpConfig('{"testExclude": [1]}')).globs, null);
+});
+
+test('loadTestExclusions: 正常系', () => {
+  const r = loadTestExclusions(tmpConfig('{"testExclude": ["**/*.test.*"]}'));
+  assert.deepEqual(r.globs, ['**/*.test.*']);
+});
+
+test('createFileExcluder: projectRoot 相対で判定し、外側は除外しない', () => {
+  const ex = createFileExcluder('/p', ['**/*.test.*']);
+  assert.ok(ex('/p/src/a.test.ts'));
+  assert.ok(!ex('/p/src/a.ts'));
+  assert.ok(!ex('/outside/a.test.ts'), 'projectRoot 外は対象にしない');
+  assert.ok(!ex('/p'), 'projectRoot 自身は対象にしない');
 });
