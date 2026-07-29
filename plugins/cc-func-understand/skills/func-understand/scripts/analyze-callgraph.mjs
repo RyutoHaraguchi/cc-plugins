@@ -9,6 +9,7 @@ import { loadProject } from './lib/project-loader.mjs';
 import { resolveTarget } from './lib/target-resolver.mjs';
 import { buildGraph } from './lib/graph-builder.mjs';
 import { addCallbackEdges } from './lib/callback-edges.mjs';
+import { loadTestExclusions, createFileExcluder } from './lib/test-file-matcher.mjs';
 
 function parseCliArgs(argv) {
   const { values } = parseArgs({
@@ -23,6 +24,8 @@ function parseCliArgs(argv) {
       'downstream-depth': { type: 'string' },
       'max-nodes': { type: 'string' },
       out: { type: 'string' },
+      'include-tests': { type: 'boolean' },
+      'test-exclude': { type: 'string' },
     },
   });
   return values;
@@ -100,10 +103,29 @@ export async function main(argv) {
   const upstreamDepth = parseIntOption('--upstream-depth', args['upstream-depth']);
   const downstreamDepth = parseIntOption('--downstream-depth', args['downstream-depth']);
 
+  // テスト除外(スペック: docs/superpowers/specs/2026-07-29-func-understand-test-exclusion-design.md)
+  // デフォルトで <projectRoot>/.func-understand.json を読む。--include-tests は定義ファイル自体を読まない。
+  let isFileExcluded = null;
+  if (!args['include-tests']) {
+    const explicitPath = args['test-exclude'];
+    const configPath = explicitPath ? path.resolve(explicitPath) : path.join(projectRoot, '.func-understand.json');
+    if (explicitPath && !fs.existsSync(configPath)) {
+      throw new Error(`--test-exclude で指定されたファイルが見つかりません: ${configPath}`);
+    }
+    const { globs, warning } = loadTestExclusions(configPath);
+    if (warning) console.error(warning);
+    if (globs && globs.length > 0) isFileExcluded = createFileExcluder(projectRoot, globs);
+  }
+  if (isFileExcluded && isFileExcluded(resolution.declaration.file)) {
+    console.error('起点がテストファイルのため、テスト除外を無効化して解析します');
+    isFileExcluded = null;
+  }
+
   const buildOpts = { projectRoot };
   if (maxNodes != null) buildOpts.maxNodes = maxNodes;
   if (upstreamDepth != null) buildOpts.upstreamDepth = upstreamDepth;
   if (downstreamDepth != null) buildOpts.downstreamDepth = downstreamDepth;
+  if (isFileExcluded) buildOpts.isFileExcluded = isFileExcluded;
 
   let graph = buildGraph(ts, proj, resolution.declaration, buildOpts);
   graph = addCallbackEdges(ts, proj, graph, { projectRoot });
