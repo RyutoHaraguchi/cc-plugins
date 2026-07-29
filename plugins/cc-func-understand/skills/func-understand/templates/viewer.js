@@ -153,7 +153,7 @@ const CY_STYLE = [
       'line-color': '#484f58',
       'target-arrow-color': '#484f58',
       'target-arrow-shape': 'triangle',
-      'curve-style': 'bezier',
+      'curve-style': 'taxi',
       'font-size': 9,
       color: '#8b949e',
     },
@@ -195,7 +195,7 @@ function render() {
   const elements = buildElements();
   cy.elements().remove();
   cy.add(elements);
-  cy.layout({ name: 'dagre', rankDir: 'LR', nodeDimensionsIncludeLabels: true, padding: 30 }).run();
+  cy.layout({ name: 'dagre', rankDir: 'LR', align: 'DL', nodeSep: 20, nodeDimensionsIncludeLabels: true, padding: 30 }).run();
 }
 
 // ============================================================

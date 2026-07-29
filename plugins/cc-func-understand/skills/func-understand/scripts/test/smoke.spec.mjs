@@ -70,3 +70,10 @@ test('④XSS fixture のコードが実行されない', async ({ page }) => {
   const executed = await page.evaluate(() => window.__xss_executed);
   expect(executed).toBeUndefined();
 });
+
+test('⑤エッジが taxi ルーティングで描画される', async ({ page }) => {
+  await page.goto(generate('callback', 'itemHandler'));
+  await expect(page.locator('#graph canvas').first()).toBeVisible();
+  const curveStyle = await page.evaluate(() => window.__cy.edges().first().style('curve-style'));
+  expect(curveStyle).toBe('taxi');
+});
