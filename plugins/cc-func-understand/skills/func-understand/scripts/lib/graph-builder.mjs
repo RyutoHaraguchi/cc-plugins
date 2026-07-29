@@ -200,8 +200,8 @@ function stepDirection(ts, proj, ctx, direction, entry, queue) {
     const peerItem = direction === 'up' ? call.from : call.to;
     // TS 標準ライブラリ / Node 組み込みはノード化しない。maxNodes チェックより前に
     // 弾くことで、stdlib が予算を消費したり truncation.frontier を汚したりしない
-    // (誤った「打ち切られた」案内を防ぐ)。
-    if (classifySymbolFile(proj.program, peerItem.file) === 'stdlib') continue;
+    // (誤った「打ち切られた」案内を防ぐ)。内部ファイルは分類器にかけない(プロジェクト所有の d.ts を誤って落とさない)。
+    if (!proj.isInternal(peerItem.file) && classifySymbolFile(proj.program, peerItem.file) === 'stdlib') continue;
     if (ctx.nodes.size >= ctx.maxNodes && !ctx.hasNode(peerItem)) {
       ctx.truncation ??= { reason: 'max-nodes', frontier: [] };
       ctx.truncation.frontier.push(peerItem.name);
