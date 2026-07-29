@@ -211,6 +211,8 @@ function initCy() {
     const id = evt.target.id();
     dimFocus = id;
     applyDim();
+    // ユーザーの明示的なタップでのみ自動オープンする(programmatic な showDetail では開かない)
+    if (detailPanel.hidden) setPanelOpen(true);
     showDetail(id);
   });
   cy.on('tap', (evt) => {

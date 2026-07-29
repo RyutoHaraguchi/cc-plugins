@@ -158,3 +158,12 @@ test('⑧トグルボタンで詳細パネルが開閉できる', async ({ page 
   await page.click('#detail-toggle');
   await expect(page.locator('#detail')).toBeVisible();
 });
+
+test('⑨閉じた状態でノードをタップするとパネルが自動で開く', async ({ page }) => {
+  await page.goto(generate('callback', 'itemHandler'));
+  await page.click('#detail-toggle');
+  await expect(page.locator('#detail')).toBeHidden();
+  await page.evaluate(() => { window.__cy.getElementById(window.__graphTargetId).emit('tap'); });
+  await expect(page.locator('#detail')).toBeVisible();
+  await expect(page.locator('#detail .detail-name')).not.toBeEmpty();
+});
