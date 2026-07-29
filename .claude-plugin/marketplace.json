@@ -20,7 +20,7 @@
       "name": "cc-func-understand",
       "description": "関数を軸に TS/JS の呼び出しグラフを静的解析し、自己完結のインタラクティブ HTML として可視化する",
       "source": "./plugins/cc-func-understand",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "keywords": ["typescript", "javascript", "call-graph", "visualization", "analysis"],
       "category": "productivity"
     }
