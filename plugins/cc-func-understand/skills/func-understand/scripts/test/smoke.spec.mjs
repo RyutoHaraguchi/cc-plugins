@@ -89,7 +89,7 @@ test('⑥ノードタップで非近傍が減光され、背景タップで解�
   expect(await page.evaluate(() => window.__cy.elements('.dimmed').length)).toBe(0);
 
   // target をタップ → 2ホップ先の boot は減光、近傍は減光されない
-  await page.evaluate(() => window.__cy.getElementById(window.__graphTargetId).emit('tap'));
+  await page.evaluate(() => { window.__cy.getElementById(window.__graphTargetId).emit('tap'); });
   await page.waitForFunction(() => window.__cy.elements('.dimmed').length > 0);
   const bootDimmed = await page.evaluate(() =>
     window.__cy
@@ -107,7 +107,7 @@ test('⑥ノードタップで非近傍が減光され、背景タップで解�
   expect(neighborhoodDimmed).toBeFalsy();
 
   // 背景タップで全解除
-  await page.evaluate(() => window.__cy.emit('tap'));
+  await page.evaluate(() => { window.__cy.emit('tap'); });
   await page.waitForFunction(() => window.__cy.elements('.dimmed').length === 0);
 });
 
@@ -132,7 +132,7 @@ test('⑦経路ハイライトをプレースホルダへ戻すと減光が解�
   );
 
   // target をタップして減光させる
-  await page.evaluate(() => window.__cy.getElementById(window.__graphTargetId).emit('tap'));
+  await page.evaluate(() => { window.__cy.getElementById(window.__graphTargetId).emit('tap'); });
   await page.waitForFunction(() => window.__cy.elements('.dimmed').length > 0);
 
   // 実エントリを選択 → render() 経由で減光が解除される
@@ -140,7 +140,7 @@ test('⑦経路ハイライトをプレースホルダへ戻すと減光が解�
   await page.waitForFunction(() => window.__cy.elements('.dimmed').length === 0);
 
   // 再度タップして dimFocus を設定し直す(経路ハイライトが選択された状態で減光が有効になる)
-  await page.evaluate(() => window.__cy.getElementById(window.__graphTargetId).emit('tap'));
+  await page.evaluate(() => { window.__cy.getElementById(window.__graphTargetId).emit('tap'); });
   await page.waitForFunction(() => window.__cy.elements('.dimmed').length > 0);
 
   // プレースホルダ(空文字)へ戻す → 減光も解除されるべき

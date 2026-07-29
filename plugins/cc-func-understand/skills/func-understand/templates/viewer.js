@@ -382,6 +382,7 @@ function doSearch(query) {
   // 残っていると「select は選択中なのに経路は消えている」という不整合が起きるため揃える。
   clearOnPath();
   if (entrySelect) entrySelect.value = '';
+  dimFocus = null;
 
   const first = matches[0];
   if (!visible.has(first.id)) {
@@ -390,6 +391,7 @@ function doSearch(query) {
     for (const e of inEdges.get(first.id) ?? []) visible.add(e.from);
     render();
   }
+  applyDim();
 
   const eles = cy.collection();
   for (const n of matches) {
