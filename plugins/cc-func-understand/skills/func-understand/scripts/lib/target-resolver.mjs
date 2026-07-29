@@ -113,11 +113,13 @@ export function collectNonFunctionDeclarations(ts, proj, name) {
 
       if (nameNode && nameNode.text === name) {
         const start = sf.getLineAndCharacterOfPosition(rangeNode.getStart(sf));
+        const end = sf.getLineAndCharacterOfPosition(rangeNode.getEnd());
         matches.push({
           file: sf.fileName,
           relFile: null,
           kind,
           startLine: start.line + 1,
+          endLine: end.line + 1,
           signature: sf.text.slice(rangeNode.getStart(sf), rangeNode.getEnd()).split('\n')[0].slice(0, 120),
         });
       }
@@ -146,10 +148,14 @@ export function resolveTarget(ts, proj, { functionName, file, line }, projectRoo
   const suggestions = decls.filter((d) => d.name.toLowerCase().includes(lower)).slice(0, 10);
 
   // 関数として見つからない場合、関数以外の名前付き宣言として実在しないか確認する(issue #8)
-  const nonFunctions = collectNonFunctionDeclarations(ts, proj, name).map((m) => ({
+  let nonFunctions = collectNonFunctionDeclarations(ts, proj, name).map((m) => ({
     ...m,
     relFile: path.relative(projectRoot, m.file),
   }));
+  // --file/--line 指定があれば関数と同じ絞り込みを適用する
+  if (file) nonFunctions = nonFunctions.filter((m) => m.relFile === file || m.relFile.endsWith(file));
+  if (line != null) nonFunctions = nonFunctions.filter((m) => m.startLine <= line && line <= m.endLine);
+
   if (nonFunctions.length > 0) return { status: 'not-a-function', matches: nonFunctions, suggestions };
 
   return { status: 'not-found', suggestions };

@@ -97,3 +97,14 @@ test('完全な typo は従来どおり not-found、アロー関数の const は
   assert.equal(r.status, 'resolved');
   assert.equal(r.declaration.kind, 'arrow');
 });
+
+test('not-a-function でも --file/--line で絞り込みが効く(指定ファイル外の同名変数は not-found になる)', () => {
+  const { root, proj: p } = proj('not-a-function');
+  // 指定ファイルが存在しないと not-found
+  const r1 = resolveTarget(ts, p, { functionName: 'API_CONFIG', file: 'src/other.ts' }, root);
+  assert.equal(r1.status, 'not-found');
+  // 正しいファイルを指定すると not-a-function
+  const r2 = resolveTarget(ts, p, { functionName: 'API_CONFIG', file: 'src/config.ts' }, root);
+  assert.equal(r2.status, 'not-a-function');
+  assert.equal(r2.matches.length, 1);
+});
