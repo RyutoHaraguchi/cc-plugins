@@ -31,6 +31,12 @@ getUser 関数の呼び出しグラフを見せて
 
 引数無しで起動された場合、または対象関数が特定できない場合は AskUserQuestion で対象関数を確認します。関数名が複数箇所にマッチする場合(`ambiguous`)は候補一覧から選択、見つからない場合(`not-found`)は候補の再入力を促します。
 
+### ビューアの操作
+
+生成されたグラフは HTML ブラウザで表示されます。グラフの操作方法:
+
+- **ノードをタップ**: そのノードの 1 ホップ近傍以外が減光され、注目部分を追いやすくなります。背景をタップすると解除されます。
+
 ## 仕組み: 5 段階パイプライン
 
 ```text
@@ -83,3 +89,10 @@ claude --plugin-dir ./plugins/cc-func-understand
 HTML artifact created: /path/to/project/docs/func-understand/2026-07-28-1430-getUser.html
 Summary: getUser の呼び出し元 3 件・呼び出し先 5 件を含むグラフ(要約付き)
 ```
+
+## 変更履歴
+
+- v0.4.0: グラフレイアウトを整理(issue #6)。dagre を align:DL + nodeSep:20 に調整、エッジを taxi ルーティングに変更、ノード選択時の近傍フォーカス(減光)を追加。
+- v0.3.0: テスト除外の自動読み込みと --include-tests / --test-exclude オプションを追加。
+- v0.2.0: AI 要約の複数エッジ対応、距離3以上での分担処理。
+- v0.1.0: 初版リリース。
