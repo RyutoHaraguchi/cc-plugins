@@ -6,6 +6,7 @@ import { loadTypeScript } from '../lib/ts-loader.mjs';
 import { loadProject } from '../lib/project-loader.mjs';
 import { resolveTarget } from '../lib/target-resolver.mjs';
 import { buildGraph } from '../lib/graph-builder.mjs';
+import { createFileExcluder } from '../lib/test-file-matcher.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const { ts } = loadTypeScript(path.join(here, '..'));
@@ -130,4 +131,25 @@ test('stdlib: TS 標準ライブラリ / Node 組み込みはノード化され�
   assert.ok(boundary, 'npm パッケージは境界ノードとして残る');
   assert.equal(boundary.kind, 'external-boundary');
   assert.equal(g.truncation, null, 'stdlib が maxNodes 予算や truncation.frontier を汚さない');
+});
+
+test('test-exclusion: テストファイル由来のノード/エッジが作られず truncation も汚れない', () => {
+  const projectRoot = path.join(here, 'fixtures', 'test-exclusion');
+  const isFileExcluded = createFileExcluder(projectRoot, ['**/*.test.*', '**/__tests__/**', '**/test/**']);
+  // テストファイルが maxNodes 予算や frontier を汚すと truncation が発生するよう、
+  // 本番ノード数ちょうど(createWidget, useWidget, logCreation)+1 の余裕に絞る
+  const g = graphFor('test-exclusion', 'createWidget', { maxNodes: 4, isFileExcluded });
+  assert.ok(byName(g, 'useWidget'), '本番上流は残る');
+  assert.ok(byName(g, 'logCreation'), '内部下流は残る');
+  assert.equal(byName(g, 'callInTest'), undefined);
+  assert.equal(byName(g, 'helperCall'), undefined);
+  assert.equal(byName(g, 'anotherTestCaller'), undefined, '距離 2 のテスト上流も出ない');
+  assert.ok(g.nodes.every((n) => !n.file || (!n.file.startsWith('__tests__/') && !n.file.startsWith('test/'))));
+  assert.equal(g.truncation, null, 'テストファイルが maxNodes 予算や truncation.frontier を汚さない');
+});
+
+test('test-exclusion: isFileExcluded 未指定なら従来どおり全ノードが出る', () => {
+  const g = graphFor('test-exclusion', 'createWidget');
+  assert.ok(byName(g, 'callInTest'));
+  assert.ok(byName(g, 'helperCall'));
 });
