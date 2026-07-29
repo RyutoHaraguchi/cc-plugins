@@ -147,3 +147,14 @@ test('⑦経路ハイライトをプレースホルダへ戻すと減光が解�
   await page.selectOption('#entry-select', { index: 0 });
   await page.waitForFunction(() => window.__cy.elements('.dimmed').length === 0);
 });
+
+test('⑧トグルボタンで詳細パネルが開閉できる', async ({ page }) => {
+  await page.goto(generate('callback', 'itemHandler'));
+  await expect(page.locator('#detail')).toBeVisible();
+  await expect(page.locator('#detail-toggle')).toHaveAttribute('aria-expanded', 'true');
+  await page.click('#detail-toggle');
+  await expect(page.locator('#detail')).toBeHidden();
+  await expect(page.locator('#detail-toggle')).toHaveAttribute('aria-expanded', 'false');
+  await page.click('#detail-toggle');
+  await expect(page.locator('#detail')).toBeVisible();
+});

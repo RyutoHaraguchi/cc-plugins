@@ -357,6 +357,30 @@ function showDetail(id) {
 }
 
 // ============================================================
+// 5b. 詳細パネルの開閉・リサイズ
+// ============================================================
+const detailPanel = document.getElementById('detail');
+const divider = document.getElementById('divider');
+const detailToggle = document.getElementById('detail-toggle');
+
+function updateToggleUi() {
+  const open = !detailPanel.hidden;
+  detailToggle.textContent = open ? '▶' : '◀';
+  detailToggle.setAttribute('aria-expanded', String(open));
+  detailToggle.setAttribute('aria-label', open ? '詳細パネルを閉じる' : '詳細パネルを開く');
+}
+
+function setPanelOpen(open) {
+  detailPanel.hidden = !open;
+  updateToggleUi();
+  // コンテナサイズが変わるため、cytoscape 側のキャンバス寸法とヒットテストを追従させる
+  if (cy) cy.resize();
+}
+
+detailToggle.addEventListener('click', () => setPanelOpen(detailPanel.hidden));
+updateToggleUi();
+
+// ============================================================
 // 6. cytoscape イベント
 // ============================================================
 // (initCy() 内で tap / dbltap を登録済み)
