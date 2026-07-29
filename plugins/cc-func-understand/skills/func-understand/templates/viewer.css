@@ -120,13 +120,44 @@ main {
 }
 
 /* ---------------------------------------------------------- */
+/* ディバイダ(リサイズ + 開閉トグル) */
+/* ---------------------------------------------------------- */
+#divider {
+  flex: 0 0 8px;
+  position: relative;
+  cursor: col-resize;
+  background: #161b22;
+  border-left: 1px solid #30363d;
+}
+
+#divider:hover {
+  background: #21262d;
+}
+
+#detail-toggle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 20px;
+  height: 48px;
+  padding: 0;
+  font-size: 10px;
+  line-height: 1;
+}
+
+body.resizing {
+  user-select: none;
+  cursor: col-resize;
+}
+
+/* ---------------------------------------------------------- */
 /* 詳細パネル */
 /* ---------------------------------------------------------- */
 #detail {
   width: 420px;
   flex: 0 0 420px;
   overflow-y: auto;
-  border-left: 1px solid #30363d;
   background: #0d1117;
   padding: 14px;
   font-size: 13px;

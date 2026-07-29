@@ -147,3 +147,39 @@ test('⑦経路ハイライトをプレースホルダへ戻すと減光が解�
   await page.selectOption('#entry-select', { index: 0 });
   await page.waitForFunction(() => window.__cy.elements('.dimmed').length === 0);
 });
+
+test('⑧トグルボタンで詳細パネルが開閉できる', async ({ page }) => {
+  await page.goto(generate('callback', 'itemHandler'));
+  await expect(page.locator('#detail')).toBeVisible();
+  await expect(page.locator('#detail-toggle')).toHaveAttribute('aria-expanded', 'true');
+  await page.click('#detail-toggle');
+  await expect(page.locator('#detail')).toBeHidden();
+  await expect(page.locator('#detail-toggle')).toHaveAttribute('aria-expanded', 'false');
+  await page.click('#detail-toggle');
+  await expect(page.locator('#detail')).toBeVisible();
+});
+
+test('⑨閉じた状態でノードをタップするとパネルが自動で開く', async ({ page }) => {
+  await page.goto(generate('callback', 'itemHandler'));
+  await page.click('#detail-toggle');
+  await expect(page.locator('#detail')).toBeHidden();
+  await page.evaluate(() => { window.__cy.getElementById(window.__graphTargetId).emit('tap'); });
+  await expect(page.locator('#detail')).toBeVisible();
+  await expect(page.locator('#detail .detail-name')).not.toBeEmpty();
+});
+
+test('⑩ディバイダのドラッグでパネル幅が変わる', async ({ page }) => {
+  await page.goto(generate('callback', 'itemHandler'));
+  const before = await page.locator('#detail').evaluate((el) => el.getBoundingClientRect().width);
+  const box = await page.locator('#divider').boundingBox();
+  // トグルボタン(20x48, ディバイダ中央に絶対配置)がディバイダ中心を覆っているため、
+  // 中心を掴むとボタンの pointerdown/click になりドラッグが始まらない。上端付近を掴む。
+  const startX = box.x + box.width / 2;
+  const startY = box.y + 10;
+  await page.mouse.move(startX, startY);
+  await page.mouse.down();
+  await page.mouse.move(startX - 120, startY, { steps: 5 });
+  await page.mouse.up();
+  const after = await page.locator('#detail').evaluate((el) => el.getBoundingClientRect().width);
+  expect(after).toBeGreaterThan(before + 60);
+});

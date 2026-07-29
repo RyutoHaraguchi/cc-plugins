@@ -211,6 +211,8 @@ function initCy() {
     const id = evt.target.id();
     dimFocus = id;
     applyDim();
+    // ユーザーの明示的なタップでのみ自動オープンする(programmatic な showDetail では開かない)
+    if (detailPanel.hidden) setPanelOpen(true);
     showDetail(id);
   });
   cy.on('tap', (evt) => {
@@ -355,6 +357,62 @@ function showDetail(id) {
     showDetail(id);
   };
 }
+
+// ============================================================
+// 5b. 詳細パネルの開閉・リサイズ
+// ============================================================
+const detailPanel = document.getElementById('detail');
+const divider = document.getElementById('divider');
+const detailToggle = document.getElementById('detail-toggle');
+
+function updateToggleUi() {
+  const open = !detailPanel.hidden;
+  detailToggle.textContent = open ? '▶' : '◀';
+  detailToggle.setAttribute('aria-expanded', String(open));
+  detailToggle.setAttribute('aria-label', open ? '詳細パネルを閉じる' : '詳細パネルを開く');
+}
+
+function setPanelOpen(open) {
+  detailPanel.hidden = !open;
+  updateToggleUi();
+  // コンテナサイズが変わるため、cytoscape 側のキャンバス寸法とヒットテストを追従させる
+  if (cy) cy.resize();
+}
+
+detailToggle.addEventListener('click', () => setPanelOpen(detailPanel.hidden));
+
+const PANEL_MIN_WIDTH = 240;
+const GRAPH_MIN_WIDTH = 320; // グラフ側に最低限残す幅
+
+function clampPanelWidth(w) {
+  const max = Math.max(PANEL_MIN_WIDTH, window.innerWidth - GRAPH_MIN_WIDTH);
+  return Math.min(Math.max(w, PANEL_MIN_WIDTH), max);
+}
+
+// トグルボタン上の pointerdown はドラッグ開始にしない(クリックとの競合防止)
+detailToggle.addEventListener('pointerdown', (evt) => evt.stopPropagation());
+
+divider.addEventListener('pointerdown', (evt) => {
+  if (detailPanel.hidden) return; // 閉じているときはリサイズしない
+  evt.preventDefault();
+  divider.setPointerCapture(evt.pointerId);
+  document.body.classList.add('resizing');
+  const onMove = (moveEvt) => {
+    detailPanel.style.flexBasis = `${clampPanelWidth(window.innerWidth - moveEvt.clientX)}px`;
+  };
+  const finish = () => {
+    divider.removeEventListener('pointermove', onMove);
+    divider.removeEventListener('pointerup', finish);
+    divider.removeEventListener('pointercancel', finish);
+    document.body.classList.remove('resizing');
+    if (cy) cy.resize();
+  };
+  divider.addEventListener('pointermove', onMove);
+  divider.addEventListener('pointerup', finish);
+  divider.addEventListener('pointercancel', finish);
+});
+
+updateToggleUi();
 
 // ============================================================
 // 6. cytoscape イベント
