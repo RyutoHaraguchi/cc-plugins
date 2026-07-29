@@ -52,7 +52,7 @@ cy.layout({ name: 'dagre', rankDir: 'LR', align: 'DL', nodeSep: 20,
 ノードをタップ選択したとき、そのノードの 1 ホップ近傍以外を減光して注目部分を追いやすくする。
 
 - 状態: `dimFocus`(選択中ノード id または null)を viewer の状態として持つ。
-- 発動: ノードのタップで `dimFocus = id`。対象は「自身 + 接続エッジ + その両端ノード」で、それ以外の可視ノード・エッジに `.dimmed` クラス(opacity 0.15 程度、viewer.css に追加)を付与する。
+- 発動: ノードのタップで `dimFocus = id`。対象は「自身 + 接続エッジ + その両端ノード」で、それ以外の可視ノード・エッジに `.dimmed` クラスを付与する。スタイルは cytoscape 要素のため CSS ではなく `CY_STYLE`(viewer.js)に `node.dimmed` / `edge.dimmed`(opacity 0.15)として追加する。
 - 解除: 背景(キャンバス)タップで `dimFocus = null`、`.dimmed` を全解除。詳細パネルは閉じない(パネル開閉は issue #7 の範囲)。
 - 初期表示では発動しない: 起動時の `showDetail(graph.target)` は programmatic 呼び出しであり、全体像を損なわないため `dimFocus` は設定しない。タップ操作でのみ発動する。
 - 再描画との整合: `render()` は要素を全再構築するため、描画後に `dimFocus` が可視なら減光を再適用する(ダブルタップ展開後もフォーカス維持。展開で追加されたノードは近傍なので減光されない)。`dimFocus` が非可視になった場合は解除する。
@@ -70,9 +70,8 @@ cy.layout({ name: 'dagre', rankDir: 'LR', align: 'DL', nodeSep: 20,
 
 ## 変更対象
 
-- `templates/viewer.js`: レイアウトオプション、edge スタイル、デクラッタ状態・ハンドラ
-- `templates/viewer.css`: `.dimmed` スタイル
-- `scripts/test/smoke.spec.mjs`: デクラッタの動作テスト
+- `templates/viewer.js`: レイアウトオプション、edge スタイル(taxi と `.dimmed` は `CY_STYLE` に追加)、デクラッタ状態・ハンドラ
+- `scripts/test/smoke.spec.mjs`: taxi ルーティングとデクラッタの動作テスト
 - `.claude-plugin/plugin.json`: version 0.4.0
 - `README.md`: 操作説明(選択でフォーカス、背景タップで解除)の追記
 
