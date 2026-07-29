@@ -98,6 +98,13 @@ export async function main(argv) {
     process.exitCode = 2;
     return;
   }
+  if (resolution.status === 'not-a-function') {
+    process.stdout.write(
+      `${JSON.stringify({ status: 'not-a-function', matches: resolution.matches, suggestions: resolution.suggestions })}\n`
+    );
+    process.exitCode = 2;
+    return;
+  }
 
   const maxNodes = parseIntOption('--max-nodes', args['max-nodes']);
   const upstreamDepth = parseIntOption('--upstream-depth', args['upstream-depth']);

@@ -67,6 +67,7 @@ node <skill>/scripts/analyze-callgraph.mjs \
 stdout の JSON と exit code で分岐する:
 
 - **exit 2, `status: "ambiguous"`**: `candidates` の各要素をラベル `relFile:startLine (containerName)` として AskUserQuestion で提示し、ユーザーに選ばせる。`containerName` が null/未設定の候補は括弧部分を省略し `relFile:startLine` とする。AskUserQuestion の `label` はこの短いラベルのみにとどめ、`signature` など詳細情報は `description` 側に入れる。選択された候補の `relFile` と `startLine` を `--file` `--line` として付与し、同じコマンドを再実行する。
+- **exit 2, `status: "not-a-function"`**: 指定名は実在するが関数ではない。`matches` の各要素を使い「`NAME` は kind(variable/class/enum/interface/type)として `relFile:startLine` に実在しますが、関数ではないため呼び出しグラフの起点にできません」とユーザーに説明する(複数一致時はすべて列挙)。`suggestions` が空でなければ候補として提示し、関数名の再入力を促す(AskUserQuestion または自由入力での確認)。
 - **exit 2, `status: "not-found"`**: `suggestions` が空の場合、解決された tsconfig が solution-style(`files: []` + `references` のみ — Vite の TS scaffold 標準)である可能性を確認し、`--tsconfig tsconfig.app.json`(または `references` が指す設定)を付けて再実行する。それでも解決しない場合に、`suggestions` を提示して関数名の再入力を促す(AskUserQuestion または自由入力での確認)。
 - **exit 0, `status: "ok"`**:
   - `truncated: true` の場合、生成自体は続行してよいが、最終報告時に「グラフが `--max-nodes` 等の上限で打ち切られたため、`--upstream-depth`/`--downstream-depth` を指定して再実行すると全体像を確認できる」旨を提案する。
