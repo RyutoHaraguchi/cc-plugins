@@ -46,6 +46,18 @@ test('見つからない名前は exit 2 で近似候補を返す', () => {
   assert.equal(JSON.parse(r.stdout).status, 'not-found');
 });
 
+test('非関数の変数名は exit 2 で not-a-function と kind・場所を返す', () => {
+  const outPath = tmp();
+  const r = run(['--project', path.join(here, 'fixtures/not-a-function'), '--function', 'API_CONFIG', '--out', outPath]);
+  assert.equal(r.code, 2);
+  const status = JSON.parse(r.stdout);
+  assert.equal(status.status, 'not-a-function');
+  assert.equal(status.matches[0].kind, 'variable');
+  assert.ok(status.matches[0].relFile && status.matches[0].startLine);
+  assert.ok(Array.isArray(status.suggestions));
+  assert.ok(!fs.existsSync(outPath));
+});
+
 test('callback fixture で参照エッジ込みの解析ができる(統合)', () => {
   const out = tmp();
   const r = run(['--project', path.join(here, 'fixtures/callback'), '--function', 'itemHandler', '--out', out]);
