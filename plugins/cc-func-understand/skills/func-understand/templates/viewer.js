@@ -467,6 +467,11 @@ function populateEntrySelect(select) {
 function onEntrySelectChange(entrySelect) {
   clearOnPath();
   dimFocus = null;
+  // val が空(プレースホルダ)の場合はこの後 render() を呼ばずに早期 return するため、
+  // ここで明示的に適用しておかないと dimFocus=null が .dimmed の除去に反映されない。
+  // render() 内でも呼ばれるが、applyDim() は dimFocus===null なら何もしない設計なので
+  // 二重に呼んでも副作用はない。
+  applyDim();
   const val = entrySelect.value;
   if (!val) return;
 
