@@ -71,6 +71,63 @@ export function collectDeclarations(ts, proj) {
   return decls;
 }
 
+/**
+ * 指定名に一致する「関数以外の名前付き宣言」を走査する(not-a-function 判定用)。
+ * resolveTarget の not-found 経路でのみ呼ばれるフォールバックで、
+ * 対象は 変数(初期化子が関数でない/なし)・クラス・enum・interface・type エイリアス。
+ * relFile はここでは計算しない(呼び出し側で projectRoot を使って解決する)。
+ */
+export function collectNonFunctionDeclarations(ts, proj, name) {
+  const matches = [];
+  for (const sf of proj.program.getSourceFiles()) {
+    if (!proj.isInternal(sf.fileName)) continue;
+    const visit = (node) => {
+      let nameNode = null;
+      let kind = null;
+      let rangeNode = node;
+
+      if (
+        ts.isVariableDeclaration(node) &&
+        ts.isIdentifier(node.name) &&
+        !(node.initializer && (ts.isArrowFunction(node.initializer) || ts.isFunctionExpression(node.initializer)))
+      ) {
+        nameNode = node.name;
+        kind = 'variable';
+        rangeNode =
+          node.parent?.parent && ts.isVariableStatement(node.parent.parent)
+            ? node.parent.parent
+            : node;
+      } else if (ts.isClassDeclaration(node) && node.name) {
+        nameNode = node.name;
+        kind = 'class';
+      } else if (ts.isEnumDeclaration(node)) {
+        nameNode = node.name;
+        kind = 'enum';
+      } else if (ts.isInterfaceDeclaration(node)) {
+        nameNode = node.name;
+        kind = 'interface';
+      } else if (ts.isTypeAliasDeclaration(node)) {
+        nameNode = node.name;
+        kind = 'type';
+      }
+
+      if (nameNode && nameNode.text === name) {
+        const start = sf.getLineAndCharacterOfPosition(rangeNode.getStart(sf));
+        matches.push({
+          file: sf.fileName,
+          relFile: null,
+          kind,
+          startLine: start.line + 1,
+          signature: sf.text.slice(rangeNode.getStart(sf), rangeNode.getEnd()).split('\n')[0].slice(0, 120),
+        });
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(sf);
+  }
+  return matches;
+}
+
 export function resolveTarget(ts, proj, { functionName, file, line }, projectRoot) {
   const name = functionName.replace(/\(\)\s*$/, '').trim();
   const decls = collectDeclarations(ts, proj).map((d) => ({
@@ -87,5 +144,13 @@ export function resolveTarget(ts, proj, { functionName, file, line }, projectRoo
 
   const lower = name.toLowerCase();
   const suggestions = decls.filter((d) => d.name.toLowerCase().includes(lower)).slice(0, 10);
+
+  // 関数として見つからない場合、関数以外の名前付き宣言として実在しないか確認する(issue #8)
+  const nonFunctions = collectNonFunctionDeclarations(ts, proj, name).map((m) => ({
+    ...m,
+    relFile: path.relative(projectRoot, m.file),
+  }));
+  if (nonFunctions.length > 0) return { status: 'not-a-function', matches: nonFunctions, suggestions };
+
   return { status: 'not-found', suggestions };
 }
