@@ -7,6 +7,7 @@ Claude Code プラグインマーケットプレイス。
 | プラグイン | 説明 |
 |--------|-------------|
 | [cc-html](./plugins/cc-html/) | `/html` でローカル HTML 成果物（operational brief）を生成。ファイル・PR・Issue・会話文脈から人間用の理解ページを作成 |
+| [cc-func-understand](./plugins/cc-func-understand/) | /func-understand <関数名> で呼び出しグラフを解析し、自己完結のインタラクティブ HTML として可視化 |
 
 ## 使い方
 

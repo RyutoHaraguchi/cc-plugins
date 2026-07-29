@@ -1,0 +1,13 @@
+{
+  // このプロジェクトは project references を使う(参照先の存在有無は project-references 検出に無関係)
+  "compilerOptions": {
+    "strict": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "target": "esnext", // 末尾カンマ
+  },
+  "include": ["src"],
+  "references": [
+    { "path": "./tsconfig.node.json" },
+  ],
+}

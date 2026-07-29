@@ -1,0 +1,82 @@
+# cc-func-understand
+
+TypeScript/JavaScript プロジェクト内の **1 関数を軸に呼び出しグラフを静的解析**し、自己完結の **インタラクティブ HTML** として可視化する Claude Code プラグイン。
+
+呼び出し元(upstream: 誰がこの関数を呼んでいるか)と呼び出し先(downstream: この関数が何を呼んでいるか)を辿り、AI による日本語要約付きのグラフをブラウザで確認できます。
+
+## 機能
+
+- **`/func-understand` スラッシュコマンド** — 関数名を指定してグラフ解析を起動
+- **`func-understand` skill** — 「この関数の呼び出し関係を可視化して」等の自然言語からも起動
+- **静的解析ベース** — TypeScript Compiler API を用いた実装ファイル解析(実行時トレースではない)
+- **AI 要約** — 起点から距離 2 以内の内部ノードに 1〜3 行の日本語要約を自動付与
+- **自己完結 HTML** — 依存ライブラリを全てインライン化した単一 HTML ファイル(ネットワーク接続不要、~800KB程度)
+- **デフォルト出力先** — `<project-root>/docs/func-understand/YYYY-MM-DD-HHMM-<関数名>.html`
+
+## 使い方
+
+### スラッシュコマンドで起動
+
+```text
+/func-understand getUser
+/func-understand handleRequest --project ./packages/api
+```
+
+### 自然言語で起動
+
+```text
+getUser 関数の呼び出しグラフを見せて
+このハンドラの呼び出し元をHTMLで可視化して
+```
+
+引数無しで起動された場合、または対象関数が特定できない場合は AskUserQuestion で対象関数を確認します。関数名が複数箇所にマッチする場合(`ambiguous`)は候補一覧から選択、見つからない場合(`not-found`)は候補の再入力を促します。
+
+## 仕組み: 4 段階パイプライン
+
+```text
+┌─────────────┐     ┌──────────────────┐     ┌───────────────┐     ┌──────────────────┐
+│ 1. 前提確認  │ --> │ 2. 解析実行       │ --> │ 3. AI 要約     │ --> │ 4. HTML 生成      │
+│ TS/JS 判定   │     │ analyze-callgraph │     │ 距離2以内のみ  │     │ generate-html.mjs │
+│ npm install  │     │ .mjs (Compiler   │     │ summary を付与 │     │ 自己完結 HTML     │
+│ (初回のみ)   │     │ API で静的解析)   │     │ 30超は分担     │     │ を書き出し        │
+└─────────────┘     └──────────────────┘     └───────────────┘     └──────────────────┘
+```
+
+1. **前提確認**: 対象が TS/JS プロジェクトであることを確認し、`scripts/node_modules` が無ければ `npm install` を実行(初回のみ)。
+2. **解析実行**: `analyze-callgraph.mjs` が TypeScript Compiler API でプロジェクトを読み込み、指定関数を起点に呼び出しグラフ(ノード/エッジ)を JSON として出力。関数名が曖昧または未検出の場合は候補を返して中断する(exit code 2)。
+3. **AI 要約**: 起点から `upstreamDistance`/`downstreamDistance` が 2 以内かつ内部(プロジェクト内)ノードにのみ、コードを読んで日本語の短い要約を書き加える。対象範囲外のノードには触れない。
+4. **HTML 生成**: `generate-html.mjs` がグラフ JSON からインタラクティブな自己完結 HTML(Cytoscape.js によるグラフ表示、コードプレビュー、要約表示を内蔵)を生成する。
+
+## 既知の制約
+
+- **動的な呼び出し**: イベントリスナー登録・DI コンテナ経由の解決など、実行時にしか決まらない呼び出しは検出できない。コールバックとして渡された関数参照のエッジのみ検出可能。
+- **project references / ビルド成果物をまたぐ呼び出し**: モノレポ構成で `tsconfig.json` の `references` を跨ぐ呼び出しや、ビルド後の成果物経由の呼び出しは境界ノードとして表現され、そこで経路が途切れる。`--tsconfig` で対象の tsconfig を明示すると改善する場合がある。
+- **匿名関数**: 名前を持たない関数式・アロー関数は解析対象として直接指定できない。
+- **TypeScript 7 系**: プロジェクトが TypeScript 7 系を使用している場合、同梱の TypeScript 5 系にフォールバックして解析する(解析結果に軽微な差異が生じ得る)。
+
+## 必要環境
+
+- Node.js 18 以上
+- 解析対象が TypeScript/JavaScript プロジェクトであること
+
+## インストール
+
+### マーケットプレイス経由
+
+```bash
+/plugin marketplace add RyutoHaraguchi/cc-plugins
+/plugin install cc-func-understand
+```
+
+### ローカルテスト
+
+```bash
+claude --plugin-dir ./plugins/cc-func-understand
+```
+
+## 出力例
+
+```text
+HTML artifact created: /path/to/project/docs/func-understand/2026-07-28-1430-getUser.html
+Summary: getUser の呼び出し元 3 件・呼び出し先 5 件を含むグラフ(要約付き)
+```
