@@ -167,3 +167,19 @@ test('⑨閉じた状態でノードをタップするとパネルが自動で�
   await expect(page.locator('#detail')).toBeVisible();
   await expect(page.locator('#detail .detail-name')).not.toBeEmpty();
 });
+
+test('⑩ディバイダのドラッグでパネル幅が変わる', async ({ page }) => {
+  await page.goto(generate('callback', 'itemHandler'));
+  const before = await page.locator('#detail').evaluate((el) => el.getBoundingClientRect().width);
+  const box = await page.locator('#divider').boundingBox();
+  // トグルボタン(20x48, ディバイダ中央に絶対配置)がディバイダ中心を覆っているため、
+  // 中心を掴むとボタンの pointerdown/click になりドラッグが始まらない。上端付近を掴む。
+  const startX = box.x + box.width / 2;
+  const startY = box.y + 10;
+  await page.mouse.move(startX, startY);
+  await page.mouse.down();
+  await page.mouse.move(startX - 120, startY, { steps: 5 });
+  await page.mouse.up();
+  const after = await page.locator('#detail').evaluate((el) => el.getBoundingClientRect().width);
+  expect(after).toBeGreaterThan(before + 60);
+});
