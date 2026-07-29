@@ -56,6 +56,24 @@ const visible = new Set([graph.target]);
 // ============================================================
 let cy = null;
 
+// 選択時デクラッタ: タップ選択したノードの1ホップ近傍以外を減光する。
+// programmatic な showDetail(初期表示・展開ボタン)では発動させず、
+// ユーザーの明示的なタップ操作でのみ dimFocus を設定する。
+let dimFocus = null;
+
+function applyDim() {
+  if (!cy) return;
+  cy.elements('.dimmed').removeClass('dimmed');
+  if (dimFocus === null) return;
+  const focus = cy.getElementById(dimFocus);
+  if (focus.length === 0) {
+    // 選択ノードが非可視になった(再構築で消えた)場合は解除する
+    dimFocus = null;
+    return;
+  }
+  cy.elements().not(focus.closedNeighborhood()).not('.on-path').addClass('dimmed');
+}
+
 function registerDagreLayout() {
   if (typeof cytoscape === 'undefined') return;
   if (typeof cytoscapeDagre === 'undefined') return;
@@ -153,7 +171,7 @@ const CY_STYLE = [
       'line-color': '#484f58',
       'target-arrow-color': '#484f58',
       'target-arrow-shape': 'triangle',
-      'curve-style': 'bezier',
+      'curve-style': 'taxi',
       'font-size': 9,
       color: '#8b949e',
     },
@@ -171,6 +189,14 @@ const CY_STYLE = [
       'z-index': 999,
     },
   },
+  {
+    selector: 'node.dimmed',
+    style: { opacity: 0.15 },
+  },
+  {
+    selector: 'edge.dimmed',
+    style: { opacity: 0.15 },
+  },
 ];
 
 function initCy() {
@@ -181,7 +207,19 @@ function initCy() {
     style: CY_STYLE,
     wheelSensitivity: 0.2,
   });
-  cy.on('tap', 'node', (evt) => showDetail(evt.target.id()));
+  cy.on('tap', 'node', (evt) => {
+    const id = evt.target.id();
+    dimFocus = id;
+    applyDim();
+    showDetail(id);
+  });
+  cy.on('tap', (evt) => {
+    // 背景(キャンバス)タップで減光を解除する。詳細パネルは閉じない(#7 の範囲)。
+    if (evt.target === cy) {
+      dimFocus = null;
+      applyDim();
+    }
+  });
   cy.on('dbltap', 'node', (evt) => {
     const id = evt.target.id();
     expand(id, 'up');
@@ -195,7 +233,8 @@ function render() {
   const elements = buildElements();
   cy.elements().remove();
   cy.add(elements);
-  cy.layout({ name: 'dagre', rankDir: 'LR', nodeDimensionsIncludeLabels: true, padding: 30 }).run();
+  cy.layout({ name: 'dagre', rankDir: 'LR', align: 'DL', nodeSep: 20, nodeDimensionsIncludeLabels: true, padding: 30 }).run();
+  applyDim();
 }
 
 // ============================================================
@@ -343,6 +382,7 @@ function doSearch(query) {
   // 残っていると「select は選択中なのに経路は消えている」という不整合が起きるため揃える。
   clearOnPath();
   if (entrySelect) entrySelect.value = '';
+  dimFocus = null;
 
   const first = matches[0];
   if (!visible.has(first.id)) {
@@ -351,6 +391,7 @@ function doSearch(query) {
     for (const e of inEdges.get(first.id) ?? []) visible.add(e.from);
     render();
   }
+  applyDim();
 
   const eles = cy.collection();
   for (const n of matches) {
@@ -427,6 +468,12 @@ function populateEntrySelect(select) {
 
 function onEntrySelectChange(entrySelect) {
   clearOnPath();
+  dimFocus = null;
+  // val が空(プレースホルダ)の場合はこの後 render() を呼ばずに早期 return するため、
+  // ここで明示的に適用しておかないと dimFocus=null が .dimmed の除去に反映されない。
+  // render() 内でも呼ばれるが、applyDim() は dimFocus===null なら何もしない設計なので
+  // 二重に呼んでも副作用はない。
+  applyDim();
   const val = entrySelect.value;
   if (!val) return;
 
