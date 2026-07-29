@@ -1,0 +1,3 @@
+{
+  "testExclude": ["**/*.test.*", "**/__tests__/**", "**/test/**"]
+}

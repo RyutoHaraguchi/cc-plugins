@@ -153,6 +153,10 @@ export function addCallbackEdges(ts, proj, graph, opts) {
         const refSf = proj.program.getSourceFile(ref.fileName);
         if (!refSf) continue;
 
+        // テスト関連ファイル内の参照はノード化しない(findReferences 経路は stepDirection の
+        // 除外を通らないため、ここでも同じマッチャーで弾く)。frontier 計上より前に skip する。
+        if (ctx.isFileExcluded(ref.fileName)) continue;
+
         const refNode = findNodeAt(ts, refSf, ref.textSpan.start);
         if (!refNode) continue;
         if (isInImportOrExport(ts, refNode)) continue;

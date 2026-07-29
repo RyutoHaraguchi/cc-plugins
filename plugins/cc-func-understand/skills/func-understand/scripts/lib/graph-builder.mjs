@@ -30,7 +30,7 @@ function lineOf(sourceFile, pos) {
  * addCallbackEdges から continueUpstream 経由で再利用される。
  */
 function createGraphContext(ts, proj, opts) {
-  const { projectRoot, maxNodes = 300, upstreamDepth = Infinity, downstreamDepth = Infinity } = opts;
+  const { projectRoot, maxNodes = 300, upstreamDepth = Infinity, downstreamDepth = Infinity, isFileExcluded = () => false } = opts;
   const nodes = new Map(); // id -> node
   const edges = new Map(); // `${from}->${to}#${kind}` -> edge (callLines をマージ)
   let extSeq = 0;
@@ -163,6 +163,7 @@ function createGraphContext(ts, proj, opts) {
     itemToNode,
     hasNode,
     upsertEdge,
+    isFileExcluded,
     visitedUp: new Set(),
     visitedDown: new Set(),
     truncation: null,
@@ -202,6 +203,10 @@ function stepDirection(ts, proj, ctx, direction, entry, queue) {
     // 弾くことで、stdlib が予算を消費したり truncation.frontier を汚したりしない
     // (誤った「打ち切られた」案内を防ぐ)。内部ファイルは分類器にかけない(プロジェクト所有の d.ts を誤って落とさない)。
     if (!proj.isInternal(peerItem.file) && classifySymbolFile(proj.program, peerItem.file) === 'stdlib') continue;
+    // テスト関連ファイルはノード化しない。stdlib と同じく maxNodes チェックより前に
+    // 弾くことで、テストファイルが予算を消費したり truncation.frontier を汚したりしない
+    // (誤った「打ち切られた」案内を防ぐ)。
+    if (ctx.isFileExcluded(peerItem.file)) continue;
     if (ctx.nodes.size >= ctx.maxNodes && !ctx.hasNode(peerItem)) {
       ctx.truncation ??= { reason: 'max-nodes', frontier: [] };
       ctx.truncation.frontier.push(peerItem.name);

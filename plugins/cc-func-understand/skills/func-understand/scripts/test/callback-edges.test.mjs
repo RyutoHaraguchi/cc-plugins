@@ -7,6 +7,7 @@ import { loadProject } from '../lib/project-loader.mjs';
 import { resolveTarget } from '../lib/target-resolver.mjs';
 import { buildGraph } from '../lib/graph-builder.mjs';
 import { addCallbackEdges } from '../lib/callback-edges.mjs';
+import { createFileExcluder } from '../lib/test-file-matcher.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const { ts } = loadTypeScript(path.join(here, '..'));
@@ -114,4 +115,27 @@ test('同一関数が同じ対象を直接呼び出しと名前渡しの両方�
   assert.ok(callback, 'callback-passed エッジが direct-call に吸収されずに追加される');
   assert.deepEqual(direct.callLines, [19], 'direct-call の callLines は呼び出し行のみを含む');
   assert.deepEqual(callback.callLines, [20], 'callback-passed の callLines は名前渡し行のみを含む');
+});
+
+test('test-exclusion: テストファイルからの callback-passed 参照はノード化されない', () => {
+  const projectRoot = path.join(here, 'fixtures', 'test-exclusion');
+  const proj = loadProject(ts, projectRoot);
+  const r = resolveTarget(ts, proj, { functionName: 'createWidget' }, projectRoot);
+  assert.equal(r.status, 'resolved');
+  const isFileExcluded = createFileExcluder(projectRoot, ['**/*.test.*', '**/__tests__/**', '**/test/**']);
+  let g = buildGraph(ts, proj, r.declaration, { projectRoot, isFileExcluded });
+  g = addCallbackEdges(ts, proj, g, { projectRoot });
+  assert.ok(!g.nodes.some((n) => n.name === 'passesFactory'), 'test/ 内の参照元関数がノード化されない');
+  assert.ok(!g.edges.some((e) => e.kind === 'callback-passed'));
+});
+
+test('test-exclusion: 除外なしなら callback-passed が検出される(対照)', () => {
+  const projectRoot = path.join(here, 'fixtures', 'test-exclusion');
+  const proj = loadProject(ts, projectRoot);
+  const r = resolveTarget(ts, proj, { functionName: 'createWidget' }, projectRoot);
+  assert.equal(r.status, 'resolved');
+  let g = buildGraph(ts, proj, r.declaration, { projectRoot });
+  g = addCallbackEdges(ts, proj, g, { projectRoot });
+  assert.ok(g.nodes.some((n) => n.name === 'passesFactory'));
+  assert.ok(g.edges.some((e) => e.kind === 'callback-passed'));
 });

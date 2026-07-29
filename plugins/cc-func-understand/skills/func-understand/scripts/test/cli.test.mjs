@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
-import { execFileSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -11,12 +11,8 @@ const cli = path.join(here, '..', 'analyze-callgraph.mjs');
 const tmp = () => path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'cfu-')), 'graph.json');
 
 function run(args) {
-  try {
-    const stdout = execFileSync('node', [cli, ...args], { encoding: 'utf8' });
-    return { code: 0, stdout };
-  } catch (e) {
-    return { code: e.status, stdout: e.stdout ?? '', stderr: e.stderr ?? '' };
-  }
+  const r = spawnSync('node', [cli, ...args], { encoding: 'utf8' });
+  return { code: r.status, stdout: r.stdout, stderr: r.stderr };
 }
 
 test('basic を end-to-end で解析し、スキーマ通りの JSON を出力する', () => {
@@ -89,5 +85,64 @@ test('solution-style tsconfig(files: [] + references)は exit 1 で --tsconfig �
   assert.match(r.stderr, /solution-style/);
   assert.match(r.stderr, /--tsconfig/);
   assert.ok(!fs.existsSync(outPath));
+});
+
+test('test-exclusion: .func-understand.json を自動読み込みしてテストを除外する', () => {
+  const out = tmp();
+  const r = run(['--project', path.join(here, 'fixtures/test-exclusion'), '--function', 'createWidget', '--out', out]);
+  assert.equal(r.code, 0);
+  const g = JSON.parse(fs.readFileSync(out, 'utf8'));
+  const names = g.nodes.map((n) => n.name);
+  assert.ok(!names.some((n) => ['callInTest', 'helperCall', 'anotherTestCaller', 'passesFactory'].includes(n)));
+  assert.ok(names.includes('useWidget'));
+});
+
+test('test-exclusion: --include-tests で定義ファイルを読まず全ノードが出る', () => {
+  const out = tmp();
+  const r = run(['--project', path.join(here, 'fixtures/test-exclusion'), '--function', 'createWidget', '--include-tests', '--out', out]);
+  assert.equal(r.code, 0);
+  const g = JSON.parse(fs.readFileSync(out, 'utf8'));
+  const names = g.nodes.map((n) => n.name);
+  assert.ok(names.includes('callInTest'));
+  assert.ok(names.includes('passesFactory'), 'callback-passed 経路も復元される');
+});
+
+test('test-exclusion: 起点がテストファイル内なら除外を無効化する', () => {
+  const out = tmp();
+  const r = run(['--project', path.join(here, 'fixtures/test-exclusion'), '--function', 'callInTest', '--out', out]);
+  assert.equal(r.code, 0);
+  assert.match(r.stderr, /起点がテストファイル/);
+  const g = JSON.parse(fs.readFileSync(out, 'utf8'));
+  assert.ok(g.nodes.some((n) => n.name === 'helperCall'), '除外が無効化されテスト内の下流も出る');
+});
+
+test('test-exclusion: --test-exclude の明示パスが存在しなければ exit 1', () => {
+  const r = run(['--project', path.join(here, 'fixtures/test-exclusion'), '--function', 'createWidget', '--test-exclude', path.join(here, 'fixtures/nonexistent.json'), '--out', tmp()]);
+  assert.equal(r.code, 1);
+  assert.match(r.stderr, /--test-exclude/);
+});
+
+test('test-exclusion: --test-exclude が壊れた JSON を指すと warning を出し除外なしで解析する', () => {
+  const brokenConfig = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'cfu-')), 'broken.json');
+  fs.writeFileSync(brokenConfig, '{ this is not json');
+  const out = tmp();
+  const r = run(['--project', path.join(here, 'fixtures/test-exclusion'), '--function', 'createWidget', '--test-exclude', brokenConfig, '--out', out]);
+  assert.equal(r.code, 0);
+  assert.match(r.stderr, /不正な JSON/);
+  const g = JSON.parse(fs.readFileSync(out, 'utf8'));
+  const names = g.nodes.map((n) => n.name);
+  assert.ok(names.includes('callInTest'), '除外設定が壊れているため除外なしで解析される');
+});
+
+test('test-exclusion: --include-tests + 壊れた --test-exclude では定義ファイルを一切読まず warning も出ない', () => {
+  const brokenConfig = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'cfu-')), 'broken.json');
+  fs.writeFileSync(brokenConfig, '{ this is not json');
+  const out = tmp();
+  const r = run(['--project', path.join(here, 'fixtures/test-exclusion'), '--function', 'createWidget', '--include-tests', '--test-exclude', brokenConfig, '--out', out]);
+  assert.equal(r.code, 0);
+  assert.equal(r.stderr, '', '--include-tests は定義ファイル自体を読まないため warning も出ない');
+  const g = JSON.parse(fs.readFileSync(out, 'utf8'));
+  const names = g.nodes.map((n) => n.name);
+  assert.ok(names.includes('callInTest'));
 });
 
