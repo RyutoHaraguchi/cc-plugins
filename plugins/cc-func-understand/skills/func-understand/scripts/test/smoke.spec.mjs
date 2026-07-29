@@ -77,3 +77,36 @@ test('⑤エッジが taxi ルーティングで描画される', async ({ page 
   const curveStyle = await page.evaluate(() => window.__cy.edges().first().style('curve-style'));
   expect(curveStyle).toBe('taxi');
 });
+
+test('⑥ノードタップで非近傍が減光され、背景タップで解除される', async ({ page }) => {
+  await page.goto(generate('callback', 'itemHandler'));
+  // boot(距離2)を表示させ、非近傍ノードを作る
+  await page.click('#expand-all');
+  await page.waitForFunction(() =>
+    window.__cy.nodes().some((n) => n.data('label')?.includes('boot')),
+  );
+  // 初期状態では減光なし(programmatic な showDetail では発動しない)
+  expect(await page.evaluate(() => window.__cy.elements('.dimmed').length)).toBe(0);
+
+  // target をタップ → 2ホップ先の boot は減光、近傍は減光されない
+  await page.evaluate(() => window.__cy.getElementById(window.__graphTargetId).emit('tap'));
+  await page.waitForFunction(() => window.__cy.elements('.dimmed').length > 0);
+  const bootDimmed = await page.evaluate(() =>
+    window.__cy
+      .nodes()
+      .filter((n) => n.data('label')?.includes('boot'))
+      .every((n) => n.hasClass('dimmed')),
+  );
+  expect(bootDimmed).toBeTruthy();
+  const neighborhoodDimmed = await page.evaluate(() =>
+    window.__cy
+      .getElementById(window.__graphTargetId)
+      .closedNeighborhood()
+      .some((el) => el.hasClass('dimmed')),
+  );
+  expect(neighborhoodDimmed).toBeFalsy();
+
+  // 背景タップで全解除
+  await page.evaluate(() => window.__cy.emit('tap'));
+  await page.waitForFunction(() => window.__cy.elements('.dimmed').length === 0);
+});

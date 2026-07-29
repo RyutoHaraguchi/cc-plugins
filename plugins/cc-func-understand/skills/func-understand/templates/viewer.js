@@ -56,6 +56,24 @@ const visible = new Set([graph.target]);
 // ============================================================
 let cy = null;
 
+// 選択時デクラッタ: タップ選択したノードの1ホップ近傍以外を減光する。
+// programmatic な showDetail(初期表示・展開ボタン)では発動させず、
+// ユーザーの明示的なタップ操作でのみ dimFocus を設定する。
+let dimFocus = null;
+
+function applyDim() {
+  if (!cy) return;
+  cy.elements('.dimmed').removeClass('dimmed');
+  if (dimFocus === null) return;
+  const focus = cy.getElementById(dimFocus);
+  if (focus.length === 0) {
+    // 選択ノードが非可視になった(再構築で消えた)場合は解除する
+    dimFocus = null;
+    return;
+  }
+  cy.elements().not(focus.closedNeighborhood()).not('.on-path').addClass('dimmed');
+}
+
 function registerDagreLayout() {
   if (typeof cytoscape === 'undefined') return;
   if (typeof cytoscapeDagre === 'undefined') return;
@@ -171,6 +189,14 @@ const CY_STYLE = [
       'z-index': 999,
     },
   },
+  {
+    selector: 'node.dimmed',
+    style: { opacity: 0.15 },
+  },
+  {
+    selector: 'edge.dimmed',
+    style: { opacity: 0.15 },
+  },
 ];
 
 function initCy() {
@@ -181,7 +207,19 @@ function initCy() {
     style: CY_STYLE,
     wheelSensitivity: 0.2,
   });
-  cy.on('tap', 'node', (evt) => showDetail(evt.target.id()));
+  cy.on('tap', 'node', (evt) => {
+    const id = evt.target.id();
+    dimFocus = id;
+    applyDim();
+    showDetail(id);
+  });
+  cy.on('tap', (evt) => {
+    // 背景(キャンバス)タップで減光を解除する。詳細パネルは閉じない(#7 の範囲)。
+    if (evt.target === cy) {
+      dimFocus = null;
+      applyDim();
+    }
+  });
   cy.on('dbltap', 'node', (evt) => {
     const id = evt.target.id();
     expand(id, 'up');
@@ -196,6 +234,7 @@ function render() {
   cy.elements().remove();
   cy.add(elements);
   cy.layout({ name: 'dagre', rankDir: 'LR', align: 'DL', nodeSep: 20, nodeDimensionsIncludeLabels: true, padding: 30 }).run();
+  applyDim();
 }
 
 // ============================================================
@@ -427,6 +466,7 @@ function populateEntrySelect(select) {
 
 function onEntrySelectChange(entrySelect) {
   clearOnPath();
+  dimFocus = null;
   const val = entrySelect.value;
   if (!val) return;
 
