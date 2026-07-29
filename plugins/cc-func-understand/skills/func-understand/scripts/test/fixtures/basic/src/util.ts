@@ -1,5 +1,5 @@
-import { basename } from "node:path";
+import { shorten } from "fake-lib";
 
 export function formatName(id: string): string {
-  return `user-${id}-${basename("/tmp/y")}`;
+  return `user-${id}-${shorten("/tmp/y")}`;
 }

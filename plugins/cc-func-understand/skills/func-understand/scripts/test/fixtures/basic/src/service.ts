@@ -1,6 +1,6 @@
 import { formatName } from "./util.js";
-import { basename } from "node:path";
+import { shorten } from "fake-lib";
 
 export function getUser(id: string): string {
-  return formatName(id) + basename("/tmp/x");
+  return formatName(id) + shorten("/tmp/x");
 }
