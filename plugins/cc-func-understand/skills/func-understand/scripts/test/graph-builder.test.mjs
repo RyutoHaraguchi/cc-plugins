@@ -113,3 +113,21 @@ test('kinds: class/method/arrow/module の kind 写像が Call Hierarchy 実物�
   assert.equal(classNode.kind, 'class');
   assert.equal(classNode.downstreamDistance, 1);
 });
+
+test('stdlib: TS 標準ライブラリ / Node 組み込みはノード化されず、npm 境界と内部エッジは残る', () => {
+  // maxNodes: 3 は summarize + label + transform でちょうど埋まる値。
+  // stdlib が予算を消費したり frontier に積まれたりすると truncation が発生するので、
+  // 「除外が maxNodes チェックより前で効いている」ことまで検証できる。
+  const g = graphFor('stdlib', 'summarize', { maxNodes: 3 });
+  for (const name of ['push', 'map', 'join', 'get', 'basename']) {
+    assert.equal(byName(g, name), undefined, `${name} はノード化されない`);
+  }
+  const helper = byName(g, 'label');
+  assert.ok(helper, 'リポ内定義の label は下流ノードとして残る');
+  assert.equal(helper.downstreamDistance, 1);
+  assert.ok(g.edges.some((e) => e.from === byName(g, 'summarize').id && e.to === helper.id));
+  const boundary = byName(g, 'transform');
+  assert.ok(boundary, 'npm パッケージは境界ノードとして残る');
+  assert.equal(boundary.kind, 'external-boundary');
+  assert.equal(g.truncation, null, 'stdlib が maxNodes 予算や truncation.frontier を汚さない');
+});
