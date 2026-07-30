@@ -11,7 +11,11 @@ function lineOf(sourceFile, pos) {
 /**
  * ソースファイル全体から CallExpression / NewExpression の引数位置に現れる
  * Identifier / PropertyAccessExpression を収集する。PropertyAccess は
- * getDefinitionAtPosition で正しく解決できるよう `.name` 側の Identifier を返す。
+ * getDefinitionAtPosition で正しく解決できるよう `.name` 側の Identifier を返す
+ * (`ident`)が、それとは別に引数式そのものの先頭位置(`argStart`)も保持する。
+ * `items.map(\n  utils\n    .fmt,\n)` のように引数が複数行にまたがると `.name` の行
+ * (ident 側)と式の先頭行(argStart 側)がずれるため、direct-call との二重計上防止の
+ * 照合には argStart〜ident の行範囲全体を使う必要がある。
  * どのノードの本体に属するかの帰属はここでは行わない(呼び出し側が最内包含宣言で判定)。
  */
 function collectArgRefs(ts, sourceFile) {
@@ -19,8 +23,8 @@ function collectArgRefs(ts, sourceFile) {
   const visit = (node) => {
     if (ts.isCallExpression(node) || ts.isNewExpression(node)) {
       for (const arg of node.arguments ?? []) {
-        if (ts.isIdentifier(arg)) refs.push(arg);
-        else if (ts.isPropertyAccessExpression(arg)) refs.push(arg.name);
+        if (ts.isIdentifier(arg)) refs.push({ ident: arg, argStart: arg.getStart(sourceFile) });
+        else if (ts.isPropertyAccessExpression(arg)) refs.push({ ident: arg.name, argStart: arg.getStart(sourceFile) });
       }
     }
     ts.forEachChild(node, visit);
@@ -76,9 +80,10 @@ export function addDownstreamCallbacks(ts, proj, graph, opts) {
     if (!sf) continue;
     if (!argRefsByFile.has(sf.fileName)) argRefsByFile.set(sf.fileName, collectArgRefs(ts, sf));
 
-    for (const refIdent of argRefsByFile.get(sf.fileName)) {
-      const refPos = refIdent.getStart(sf);
+    for (const { ident, argStart } of argRefsByFile.get(sf.fileName)) {
+      const refPos = ident.getStart(sf);
       const refLine = lineOf(sf, refPos);
+      const argStartLine = lineOf(sf, argStart);
       // このノード自身の本体内の参照だけを扱う(ネストした名前付き関数内の参照は、
       // その関数がノード化されてスキャンされるときに扱う)
       if (findEnclosingDeclId(node.file, refLine) !== node.id) continue;
@@ -92,16 +97,23 @@ export function addDownstreamCallbacks(ts, proj, graph, opts) {
 
         const calleeId = `${decl.relFile}#${decl.selectionStart}`;
 
-        // direct-call との二重計上防止: 同じ from→to の direct-call が同一行を記録済みならスキップ
-        // (items.map(utils.fmt) のような PropertyAccess は outgoing calls が既に検出している)
+        // direct-call との二重計上防止: 同じ from→to の direct-call が引数式の先頭行
+        // (argStartLine)〜 .name の行(refLine)の範囲内に callLines を1本でも記録済みなら
+        // スキップする(items.map(utils.fmt) のような PropertyAccess は outgoing calls が
+        // 既に検出している)。単一行の Identifier/PropertyAccess では argStartLine === refLine
+        // になるため従来と同じ挙動になる。複数行 PropertyAccess(items.map(\n utils\n .fmt))では
+        // direct-call の callLines が式先頭行を指す一方 refLine は `.name` の行になりずれるため、
+        // 範囲一致で照合する。
         const dc = ctx.edges.get(`${node.id}->${calleeId}#direct-call`);
-        if (dc && dc.callLines.includes(refLine)) continue;
+        if (dc && dc.callLines.some((l) => l >= argStartLine && l <= refLine)) continue;
 
         // maxNodes 予算: 新規ノードを作れない場合は frontier に積んで打ち切りを知らせる
         // (stepDirection / addCallbackEdges と同じパターン)
         if (!ctx.nodes.has(calleeId) && ctx.nodes.size >= ctx.maxNodes) {
           ctx.truncation ??= { reason: 'max-nodes', frontier: [] };
-          ctx.truncation.frontier.push(decl.name);
+          // 同一関数が複数行(例: helper が map と register の2箇所)で渡された場合に
+          // frontier へ同名が重複して積まれないようにする
+          if (!ctx.truncation.frontier.includes(decl.name)) ctx.truncation.frontier.push(decl.name);
           continue;
         }
 

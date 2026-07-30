@@ -58,6 +58,17 @@ test('発見された helper の下流(normalize)が direct-call で継続探索
   assert.equal(edges[0].kind, 'direct-call');
 });
 
+test('複数行にまたがる PropertyAccess 引数(items.map(utils\\n.fmt)) も direct-call のみで二重計上されない', () => {
+  // withUpstreamPass: false — addCallbackEdges(後段の上流パス)は callback-edges.mjs 内に
+  // 独自の行完全一致ベースの二重計上防止(directCallMarkers)を持ち、これは本修正の対象外
+  // (今回の指摘は addDownstreamCallbacks/collectArgRefs のみ)。ここでは addDownstreamCallbacks
+  // 単体の挙動を検証する。
+  const g = analyze('multiline', {}, { withUpstreamPass: false });
+  const edges = edgesBetween(g, byName(g, 'multiline'), byName(g, 'fmt'));
+  assert.equal(edges.length, 1);
+  assert.equal(edges[0].kind, 'direct-call');
+});
+
 test('後段 addCallbackEdges が新ノード helper への上流(otherUser)も検出する', () => {
   const g = analyze('target');
   const otherUser = byName(g, 'otherUser');
@@ -89,6 +100,7 @@ test('maxNodes 到達時はノード化せず truncation.frontier に積む', ()
   assert.ok(!byName(g, 'helper'));
   assert.equal(g.truncation.reason, 'max-nodes');
   assert.ok(g.truncation.frontier.includes('helper'));
+  assert.equal(g.truncation.frontier.filter((n) => n === 'helper').length, 1, '同一関数が複数行で渡されても frontier には1回だけ積まれる');
 });
 
 test('テスト除外ファイル内の宣言に解決される名前渡しは発見されない', () => {

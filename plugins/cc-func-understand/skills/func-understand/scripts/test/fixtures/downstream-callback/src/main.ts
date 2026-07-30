@@ -20,3 +20,10 @@ export function applyEach(items: string[], cb: Fn): string[] {
 export function usesExcluded(items: string[]): string[] {
   return items.map(exHelper);           // テスト除外時に発見されないこと(Task 2)
 }
+
+export function multiline(items: string[]): string[] {
+  return items.map(
+    utils
+      .fmt,
+  );                                    // 複数行 PropertyAccess(direct-call との二重計上防止の確認用)
+}
