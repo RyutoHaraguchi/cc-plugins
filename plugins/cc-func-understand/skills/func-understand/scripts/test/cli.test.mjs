@@ -46,13 +46,13 @@ test('見つからない名前は exit 2 で近似候補を返す', () => {
   assert.equal(JSON.parse(r.stdout).status, 'not-found');
 });
 
-test('非関数の変数名は exit 2 で not-a-function と kind・場所を返す', () => {
+test('クラス名は exit 2 で not-a-function と kind・場所を返す', () => {
   const outPath = tmp();
-  const r = run(['--project', path.join(here, 'fixtures/not-a-function'), '--function', 'API_CONFIG', '--out', outPath]);
+  const r = run(['--project', path.join(here, 'fixtures/not-a-function'), '--function', 'WidgetStore', '--out', outPath]);
   assert.equal(r.code, 2);
   const status = JSON.parse(r.stdout);
   assert.equal(status.status, 'not-a-function');
-  assert.equal(status.matches[0].kind, 'variable');
+  assert.equal(status.matches[0].kind, 'class');
   assert.ok(status.matches[0].relFile && status.matches[0].startLine);
   assert.ok(Array.isArray(status.suggestions));
   assert.ok(!fs.existsSync(outPath));
@@ -168,5 +168,28 @@ test('downstream-callback fixture: 名前渡しされた関数が下流ノード
   assert.equal(helper.downstreamDistance, 1);
   assert.ok(g.edges.some((e) => e.kind === 'callback-passed' && e.to === helper.id));
   assert.ok(g.nodes.every((n) => !('_selection' in n)), '新ノードも _selection が strip される');
+});
+
+test('変数指定は参照グラフモードとして exit 0 / mode: reference のグラフを生成する', () => {
+  const out = tmp();
+  const r = run(['--project', path.join(here, 'fixtures/reference-graph'), '--function', 'SETTINGS', '--out', out]);
+  assert.equal(r.code, 0);
+  const status = JSON.parse(r.stdout);
+  assert.equal(status.status, 'ok');
+  assert.equal(status.mode, 'reference');
+  const g = JSON.parse(fs.readFileSync(out, 'utf8'));
+  assert.equal(g.meta.mode, 'reference');
+  const target = g.nodes.find((n) => n.id === g.target);
+  assert.equal(target.kind, 'variable');
+  assert.ok(g.edges.some((e) => e.kind === 'reads'));
+  assert.ok(g.nodes.every((n) => !('_selection' in n)), '_selection が strip される');
+});
+
+test('関数グラフの stdout / meta に mode が付かない(既存出力不変)', () => {
+  const out = tmp();
+  const r = run(['--project', path.join(here, 'fixtures/basic'), '--function', 'getUser', '--out', out]);
+  assert.equal(r.code, 0);
+  assert.ok(!('mode' in JSON.parse(r.stdout)));
+  assert.ok(!('mode' in JSON.parse(fs.readFileSync(out, 'utf8')).meta));
 });
 

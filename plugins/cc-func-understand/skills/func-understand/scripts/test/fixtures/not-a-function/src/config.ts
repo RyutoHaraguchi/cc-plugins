@@ -24,3 +24,7 @@ export const applyConfig = (): number => {
   loadConfig();
   return MAX_RETRIES;
 };
+
+export interface Config {
+  retries: number;
+}
