@@ -74,7 +74,7 @@ export function collectDeclarations(ts, proj) {
 /**
  * 指定名に一致する「関数以外の名前付き宣言」を走査する(not-a-function 判定用)。
  * resolveTarget の not-found 経路でのみ呼ばれるフォールバックで、
- * 対象は 変数(初期化子が関数でない/なし)・クラス・enum・interface・type エイリアス。
+ * 対象は クラス・enum・interface・type エイリアス(変数は resolved-variable 側で処理)。
  * relFile はここでは計算しない(呼び出し側で projectRoot を使って解決する)。
  */
 export function collectNonFunctionDeclarations(ts, proj, name) {
@@ -86,18 +86,7 @@ export function collectNonFunctionDeclarations(ts, proj, name) {
       let kind = null;
       let rangeNode = node;
 
-      if (
-        ts.isVariableDeclaration(node) &&
-        ts.isIdentifier(node.name) &&
-        !(node.initializer && (ts.isArrowFunction(node.initializer) || ts.isFunctionExpression(node.initializer)))
-      ) {
-        nameNode = node.name;
-        kind = 'variable';
-        rangeNode =
-          node.parent?.parent && ts.isVariableStatement(node.parent.parent)
-            ? node.parent.parent
-            : node;
-      } else if (ts.isClassDeclaration(node) && node.name) {
+      if (ts.isClassDeclaration(node) && node.name) {
         nameNode = node.name;
         kind = 'class';
       } else if (ts.isEnumDeclaration(node)) {
@@ -130,6 +119,48 @@ export function collectNonFunctionDeclarations(ts, proj, name) {
   return matches;
 }
 
+/**
+ * モジュールスコープの値宣言(変数・enum)から指定名に一致するものを収集する。
+ * 参照グラフモード(resolved-variable)の起点解決に使う。
+ * - 変数は SourceFile 直下の VariableStatement のみ(関数内ローカル・catch 節・
+ *   for-of ループ変数は対象外 → 指定時は not-found に落ちる)
+ * - アロー関数/関数式を初期化子に持つ変数は関数宣言(collectDeclarations 側)の
+ *   担当なので対象外
+ * relFile はここでは計算しない(呼び出し側で projectRoot を使って解決する)。
+ */
+export function collectModuleValueDeclarations(ts, proj, name) {
+  const matches = [];
+  const entry = (sf, rangeNode, nameNode, kind) => {
+    const start = sf.getLineAndCharacterOfPosition(rangeNode.getStart(sf));
+    const end = sf.getLineAndCharacterOfPosition(rangeNode.getEnd());
+    return {
+      file: sf.fileName,
+      relFile: null,
+      name: nameNode.text,
+      kind,
+      selectionStart: nameNode.getStart(sf),
+      startLine: start.line + 1,
+      endLine: end.line + 1,
+      signature: sf.text.slice(rangeNode.getStart(sf), rangeNode.getEnd()).split('\n')[0].slice(0, 120),
+    };
+  };
+  for (const sf of proj.program.getSourceFiles()) {
+    if (!proj.isInternal(sf.fileName)) continue;
+    for (const stmt of sf.statements) {
+      if (ts.isVariableStatement(stmt)) {
+        for (const decl of stmt.declarationList.declarations) {
+          if (!ts.isIdentifier(decl.name) || decl.name.text !== name) continue;
+          if (decl.initializer && (ts.isArrowFunction(decl.initializer) || ts.isFunctionExpression(decl.initializer))) continue;
+          matches.push(entry(sf, stmt, decl.name, 'variable'));
+        }
+      } else if (ts.isEnumDeclaration(stmt) && stmt.name.text === name) {
+        matches.push(entry(sf, stmt, stmt.name, 'enum'));
+      }
+    }
+  }
+  return matches;
+}
+
 export function resolveTarget(ts, proj, { functionName, file, line }, projectRoot) {
   const name = functionName.replace(/\(\)\s*$/, '').trim();
   const decls = collectDeclarations(ts, proj).map((d) => ({
@@ -143,6 +174,18 @@ export function resolveTarget(ts, proj, { functionName, file, line }, projectRoo
 
   if (matched.length === 1) return { status: 'resolved', declaration: matched[0] };
   if (matched.length > 1) return { status: 'ambiguous', candidates: matched };
+
+  // 関数として見つからない場合、モジュールスコープの値宣言(変数・enum)なら
+  // 参照グラフモードの起点として解決する(resolved-variable)。--file/--line の
+  // 絞り込みは関数と同じルールを適用する。
+  let valueDecls = collectModuleValueDeclarations(ts, proj, name).map((d) => ({
+    ...d,
+    relFile: path.relative(projectRoot, d.file),
+  }));
+  if (file) valueDecls = valueDecls.filter((d) => d.relFile === file || d.relFile.endsWith(file));
+  if (line != null) valueDecls = valueDecls.filter((d) => d.startLine <= line && line <= d.endLine);
+  if (valueDecls.length === 1) return { status: 'resolved-variable', declaration: valueDecls[0] };
+  if (valueDecls.length > 1) return { status: 'ambiguous', candidates: valueDecls };
 
   const lower = name.toLowerCase();
   const suggestions = decls.filter((d) => d.name.toLowerCase().includes(lower)).slice(0, 10);

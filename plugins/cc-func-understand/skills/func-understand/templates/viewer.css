@@ -71,6 +71,12 @@ body {
   color: #6e7681;
 }
 
+#banner .mode-line {
+  color: #d29922;
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
 #search {
   background: #0d1117;
   border: 1px solid #30363d;
@@ -132,6 +138,11 @@ main {
 
 #divider:hover {
   background: #21262d;
+}
+
+/* 閉状態ではリサイズできないため、リサイズ可能に見せない */
+#divider.panel-closed {
+  cursor: default;
 }
 
 #detail-toggle {

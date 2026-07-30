@@ -117,6 +117,22 @@ test('同一関数が同じ対象を直接呼び出しと名前渡しの両方�
   assert.deepEqual(callback.callLines, [20], 'callback-passed の callLines は名前渡し行のみを含む');
 });
 
+test('複数行 PropertyAccess 参照(items.map(utils\\n.fmt))は direct-call と二重計上されない', () => {
+  // multiline 起点だと outgoing calls が direct-call の callLines に式先頭行(utils の行)を
+  // 記録する一方、findReferences の参照位置は .fmt の行になる。行単位完全一致の照合では
+  // このずれでマーカーが外れ、同一参照から二重エッジが生成される(issue #15)。
+  const projectRoot = path.join(here, 'fixtures/downstream-callback');
+  const proj = loadProject(ts, projectRoot);
+  const r = resolveTarget(ts, proj, { functionName: 'multiline' }, projectRoot);
+  const g = addCallbackEdges(ts, proj, buildGraph(ts, proj, r.declaration, { projectRoot }), { projectRoot });
+  const multiline = byName(g, 'multiline');
+  const fmt = byName(g, 'fmt');
+  assert.ok(fmt, 'items.map(utils\\n.fmt) の fmt が direct-call でノード化される');
+  const edges = g.edges.filter((e) => e.from === multiline.id && e.to === fmt.id);
+  assert.equal(edges.length, 1, 'direct-call と callback-passed の二重エッジにならない');
+  assert.equal(edges[0].kind, 'direct-call');
+});
+
 test('test-exclusion: テストファイルからの callback-passed 参照はノード化されない', () => {
   const projectRoot = path.join(here, 'fixtures', 'test-exclusion');
   const proj = loadProject(ts, projectRoot);

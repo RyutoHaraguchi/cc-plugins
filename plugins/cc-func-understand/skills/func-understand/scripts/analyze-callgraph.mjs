@@ -8,6 +8,7 @@ import { loadTypeScript } from './lib/ts-loader.mjs';
 import { loadProject } from './lib/project-loader.mjs';
 import { resolveTarget } from './lib/target-resolver.mjs';
 import { buildGraph } from './lib/graph-builder.mjs';
+import { buildReferenceGraph } from './lib/reference-graph.mjs';
 import { addDownstreamCallbacks } from './lib/downstream-callbacks.mjs';
 import { addCallbackEdges } from './lib/callback-edges.mjs';
 import { loadTestExclusions, createFileExcluder } from './lib/test-file-matcher.mjs';
@@ -135,15 +136,24 @@ export async function main(argv) {
   if (downstreamDepth != null) buildOpts.downstreamDepth = downstreamDepth;
   if (isFileExcluded) buildOpts.isFileExcluded = isFileExcluded;
 
-  let graph = buildGraph(ts, proj, resolution.declaration, buildOpts);
-  graph = addDownstreamCallbacks(ts, proj, graph, { projectRoot });
-  graph = addCallbackEdges(ts, proj, graph, { projectRoot });
+  const isReferenceMode = resolution.status === 'resolved-variable';
+  let graph;
+  if (isReferenceMode) {
+    // 参照グラフモード: 下流探索なし。--downstream-depth は無視する(エラーにしない)
+    graph = buildReferenceGraph(ts, proj, resolution.declaration, buildOpts);
+    graph = addCallbackEdges(ts, proj, graph, { projectRoot });
+  } else {
+    graph = buildGraph(ts, proj, resolution.declaration, buildOpts);
+    graph = addDownstreamCallbacks(ts, proj, graph, { projectRoot });
+    graph = addCallbackEdges(ts, proj, graph, { projectRoot });
+  }
 
   graph.meta = {
     tsVersion,
     tsSource,
     tsconfig: proj.tsconfigPath ? path.relative(projectRoot, proj.tsconfigPath) : null,
     limitations: buildLimitations(ts, proj.tsconfigPath),
+    ...(isReferenceMode ? { mode: 'reference' } : {}),
   };
   graph.nodes = graph.nodes.map(stripSelection);
   delete graph._ctx;
@@ -152,7 +162,7 @@ export async function main(argv) {
   fs.writeFileSync(outPath, JSON.stringify(graph, null, 2));
 
   process.stdout.write(
-    `${JSON.stringify({ status: 'ok', nodes: graph.nodes.length, edges: graph.edges.length, truncated: Boolean(graph.truncation), out: outPath })}\n`
+    `${JSON.stringify({ status: 'ok', ...(isReferenceMode ? { mode: 'reference' } : {}), nodes: graph.nodes.length, edges: graph.edges.length, truncated: Boolean(graph.truncation), out: outPath })}\n`
   );
 }
 

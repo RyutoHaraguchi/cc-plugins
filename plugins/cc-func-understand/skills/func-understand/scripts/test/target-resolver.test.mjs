@@ -55,38 +55,45 @@ test('見つからない名前は not-found と近似候補(部分一致・大�
   assert.ok(r.suggestions.some((s) => s.name === 'getUser'));
 });
 
-test('オブジェクト定数を指定すると not-a-function になり kind と場所を返す', () => {
+test('モジュールレベルのオブジェクト定数は resolved-variable になり宣言情報を返す', () => {
   const { root, proj: p } = proj('not-a-function');
   const r = resolveTarget(ts, p, { functionName: 'API_CONFIG' }, root);
-  assert.equal(r.status, 'not-a-function');
-  assert.equal(r.matches.length, 1);
-  assert.equal(r.matches[0].kind, 'variable');
-  assert.equal(r.matches[0].relFile, 'src/config.ts');
-  assert.ok(r.matches[0].startLine >= 1);
-  assert.ok(r.matches[0].signature.includes('API_CONFIG'));
+  assert.equal(r.status, 'resolved-variable');
+  assert.equal(r.declaration.kind, 'variable');
+  assert.equal(r.declaration.relFile, 'src/config.ts');
+  assert.ok(r.declaration.selectionStart > 0);
+  assert.ok(r.declaration.startLine >= 1);
 });
 
-test('プリミティブ定数・初期化子なし変数も not-a-function(kind: variable)になる', () => {
+test('プリミティブ定数・初期化子なし変数も resolved-variable になる', () => {
   const { root, proj: p } = proj('not-a-function');
-  assert.equal(resolveTarget(ts, p, { functionName: 'MAX_RETRIES' }, root).status, 'not-a-function');
+  assert.equal(resolveTarget(ts, p, { functionName: 'MAX_RETRIES' }, root).status, 'resolved-variable');
   const r = resolveTarget(ts, p, { functionName: 'counter' }, root);
-  assert.equal(r.status, 'not-a-function');
-  assert.equal(r.matches[0].kind, 'variable');
+  assert.equal(r.status, 'resolved-variable');
+  assert.equal(r.declaration.kind, 'variable');
 });
 
-test('クラス・enum・interface・type も not-a-function になり kind を区別する', () => {
+test('クラス・interface・type は従来どおり not-a-function で kind を区別する', () => {
   const { root, proj: p } = proj('not-a-function');
-  const kinds = ['WidgetStore', 'Color', 'Widget', 'WidgetId'].map(
+  const kinds = ['WidgetStore', 'Widget', 'WidgetId'].map(
     (n) => resolveTarget(ts, p, { functionName: n }, root)
   );
   assert.ok(kinds.every((r) => r.status === 'not-a-function'));
-  assert.deepEqual(kinds.map((r) => r.matches[0].kind), ['class', 'enum', 'interface', 'type']);
+  assert.deepEqual(kinds.map((r) => r.matches[0].kind), ['class', 'interface', 'type']);
+});
+
+test('モジュールレベルの enum は resolved-variable(kind: enum)になる', () => {
+  const { root, proj: p } = proj('not-a-function');
+  const r = resolveTarget(ts, p, { functionName: 'Color' }, root);
+  assert.equal(r.status, 'resolved-variable');
+  assert.equal(r.declaration.kind, 'enum');
 });
 
 test('not-a-function でも部分一致の関数候補を suggestions に返す', () => {
   const { root, proj: p } = proj('not-a-function');
-  const r = resolveTarget(ts, p, { functionName: 'config' }, root);
+  const r = resolveTarget(ts, p, { functionName: 'Config' }, root);
   assert.equal(r.status, 'not-a-function');
+  assert.equal(r.matches[0].kind, 'interface');
   assert.ok(r.suggestions.some((s) => s.name === 'loadConfig'));
 });
 
@@ -98,13 +105,37 @@ test('完全な typo は従来どおり not-found、アロー関数の const は
   assert.equal(r.declaration.kind, 'arrow');
 });
 
-test('not-a-function でも --file/--line で絞り込みが効く(指定ファイル外の同名変数は not-found になる)', () => {
+test('resolved-variable でも --file 絞り込みが効く(指定ファイル外は not-found)', () => {
   const { root, proj: p } = proj('not-a-function');
-  // 指定ファイルが存在しないと not-found
   const r1 = resolveTarget(ts, p, { functionName: 'API_CONFIG', file: 'src/other.ts' }, root);
   assert.equal(r1.status, 'not-found');
-  // 正しいファイルを指定すると not-a-function
   const r2 = resolveTarget(ts, p, { functionName: 'API_CONFIG', file: 'src/config.ts' }, root);
-  assert.equal(r2.status, 'not-a-function');
-  assert.equal(r2.matches.length, 1);
+  assert.equal(r2.status, 'resolved-variable');
+});
+
+test('同名のモジュール変数が複数あれば ambiguous、--line で一意に絞れる', () => {
+  const { root, proj: p } = proj('not-a-function');
+  const all = resolveTarget(ts, p, { functionName: 'SITE_LIMIT' }, root);
+  assert.equal(all.status, 'ambiguous');
+  assert.equal(all.candidates.length, 2);
+  const siteB = all.candidates.find((m) => m.relFile === 'src/site-b.ts');
+  const r = resolveTarget(ts, p, { functionName: 'SITE_LIMIT', line: siteB.startLine }, root);
+  assert.equal(r.status, 'resolved-variable');
+  assert.equal(r.declaration.relFile, 'src/site-b.ts');
+  assert.equal(resolveTarget(ts, p, { functionName: 'SITE_LIMIT', line: 999 }, root).status, 'not-found');
+});
+
+test('関数内ローカル・catch 節・for-of 変数は not-found(ノイズにならない)', () => {
+  const { root, proj: p } = proj('not-a-function');
+  for (const name of ['LOCAL_CFG', 'caughtErr', 'loopItem']) {
+    assert.equal(resolveTarget(ts, p, { functionName: name }, root).status, 'not-found', name);
+  }
+});
+
+test('関数スコープの enum は collectNonFunctionDeclarations で not-a-function 返却される(退行防止)', () => {
+  const { root, proj: p } = proj('not-a-function');
+  const r = resolveTarget(ts, p, { functionName: 'LocalColor' }, root);
+  assert.equal(r.status, 'not-a-function', 'nested enum はモジュールレベルでないため resolved-variable では拾えず not-a-function に落ちる');
+  assert.equal(r.matches[0].kind, 'enum');
+  assert.ok(r.matches[0].relFile && r.matches[0].startLine, '場所情報が保持される');
 });

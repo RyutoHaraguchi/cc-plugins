@@ -50,6 +50,22 @@ test('globToRegExp: 正規表現特殊文字はリテラル扱い', () => {
   assert.ok(globToRegExp('a+b/*.ts').test('a+b/x.ts'));
 });
 
+test('globToRegExp: {} 内の正規表現特殊文字はリテラル扱い', () => {
+  const re = globToRegExp('**/*{.test,.spec}.ts');
+  assert.ok(re.test('src/a.test.ts'));
+  assert.ok(re.test('src/a.spec.ts'));
+  assert.ok(!re.test('src/aXtest.ts'), '{} 内の . が正規表現の任意一文字として解釈されない');
+});
+
+test('globToRegExp: {} 内のワイルドカードは、どのパターンのどこが不正かが分かるエラーになる', () => {
+  assert.throws(
+    () => globToRegExp('src/{a*b,c}.ts'),
+    (e) => e.message.includes('src/{a*b,c}.ts') && e.message.includes('{a*b,c}') && e.message.includes('*'),
+    'パターン全体と不正な {} と文字がメッセージに含まれる',
+  );
+  assert.throws(() => globToRegExp('src/{a?b}.ts'), /\?/);
+});
+
 test('createMatcher: 複数パターンのいずれかにマッチし、パス区切りを正規化する', () => {
   const m = createMatcher(['**/*.test.*', '**/__tests__/**']);
   assert.ok(m('__tests__/foo.ts'));
@@ -86,6 +102,11 @@ test('loadTestExclusions: testExclude が文字列配列でなければ globs nu
 test('loadTestExclusions: 正常系', () => {
   const r = loadTestExclusions(tmpConfig('{"testExclude": ["**/*.test.*"]}'));
   assert.deepEqual(r.globs, ['**/*.test.*']);
+});
+
+test('loadTestExclusions: 末尾スラッシュのパターンは dir/** に正規化される(サイレント no-op 防止)', () => {
+  const r = loadTestExclusions(tmpConfig('{"testExclude": ["test/", "src/**"]}'));
+  assert.deepEqual(r.globs, ['test/**', 'src/**']);
 });
 
 test('createFileExcluder: projectRoot 相対で判定し、外側は除外しない', () => {

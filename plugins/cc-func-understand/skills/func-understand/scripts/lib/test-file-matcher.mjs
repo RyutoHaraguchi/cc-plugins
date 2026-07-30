@@ -12,8 +12,8 @@ import path from 'node:path';
 
 const REGEX_SPECIALS = /[.+^$()|[\]\\]/g;
 
-/** 1 セグメント分の glob(`**` 以外)を正規表現文字列へ変換する */
-function segmentToRegExp(seg) {
+/** 1 セグメント分の glob(`**` 以外)を正規表現文字列へ変換する。glob はエラーメッセージ用の元パターン全体 */
+function segmentToRegExp(seg, glob) {
   // プレースホルダを使って {a,b} を保護する
   const braceExpansions = [];
   const withBracePlaceholders = seg.replace(/\{([^}]*)\}/g, function (match) {
@@ -28,11 +28,18 @@ function segmentToRegExp(seg) {
     .replaceAll('*', '[^/]*')
     .replaceAll('?', '[^/]');
 
-  // ブレース拡張プレースホルダを正規表現に置き換える
+  // ブレース拡張プレースホルダを正規表現に置き換える。{a,b} はリテラル選択のみの
+  // サポートなので、ワイルドカードは明確なエラーにし、正規表現特殊文字はエスケープする
   return escaped.replace(/__BRACE_(\d+)__/g, (_, index) => {
     const original = braceExpansions[parseInt(index)];
     const body = original.slice(1, -1); // { と } を除去
-    return `(?:${body.split(',').join('|')})`;
+    const wildcard = body.match(/[*?]/);
+    if (wildcard) {
+      throw new Error(
+        `testExclude パターン "${glob}" の ${original} 内でワイルドカード "${wildcard[0]}" はサポートされません({a,b} はリテラルの選択のみ)`,
+      );
+    }
+    return `(?:${body.split(',').map((alt) => alt.replace(REGEX_SPECIALS, '\\$&')).join('|')})`;
   });
 }
 
@@ -48,7 +55,7 @@ export function globToRegExp(glob) {
       parts.push(isLast ? '(?:[^/]+/)*[^/]+' : '(?:[^/]+/)*');
       continue;
     }
-    parts.push(segmentToRegExp(seg) + (isLast ? '' : '/'));
+    parts.push(segmentToRegExp(seg, glob) + (isLast ? '' : '/'));
   }
   return new RegExp(`^${parts.join('')}$`);
 }
@@ -84,7 +91,9 @@ export function loadTestExclusions(configPath) {
   if (!Array.isArray(globs) || !globs.every((g) => typeof g === 'string')) {
     return { globs: null };
   }
-  return { globs };
+  // 末尾スラッシュ形式("test/")はセグメント末尾が空文字になりどのパスにもマッチしない
+  // (サイレント no-op)ため、意図どおり配下全体を除外する "test/**" に正規化する
+  return { globs: globs.map((g) => (g.endsWith('/') ? `${g}**` : g)) };
 }
 
 export function createFileExcluder(projectRoot, globs) {

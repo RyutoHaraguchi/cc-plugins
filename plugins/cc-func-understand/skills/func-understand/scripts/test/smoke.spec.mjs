@@ -152,11 +152,17 @@ test('⑧トグルボタンで詳細パネルが開閉できる', async ({ page 
   await page.goto(generate('callback', 'itemHandler'));
   await expect(page.locator('#detail')).toBeVisible();
   await expect(page.locator('#detail-toggle')).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.locator('#detail-toggle')).toHaveText('▶');
+  await expect(page.locator('#detail-toggle')).toHaveAttribute('aria-label', '詳細パネルを閉じる');
   await page.click('#detail-toggle');
   await expect(page.locator('#detail')).toBeHidden();
   await expect(page.locator('#detail-toggle')).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.locator('#detail-toggle')).toHaveText('◀');
+  await expect(page.locator('#detail-toggle')).toHaveAttribute('aria-label', '詳細パネルを開く');
   await page.click('#detail-toggle');
   await expect(page.locator('#detail')).toBeVisible();
+  await expect(page.locator('#detail-toggle')).toHaveText('▶');
+  await expect(page.locator('#detail-toggle')).toHaveAttribute('aria-label', '詳細パネルを閉じる');
 });
 
 test('⑨閉じた状態でノードをタップするとパネルが自動で開く', async ({ page }) => {
@@ -182,4 +188,63 @@ test('⑩ディバイダのドラッグでパネル幅が変わる', async ({ pa
   await page.mouse.up();
   const after = await page.locator('#detail').evaluate((el) => el.getBoundingClientRect().width);
   expect(after).toBeGreaterThan(before + 60);
+});
+
+test('⑪経路ハイライト中にノードをタップしても経路上ノードは減光されない', async ({ page }) => {
+  await page.goto(generate('callback', 'itemHandler'));
+  // boot をエントリに選択(boot → setupRoutes → itemHandler の経路がハイライトされる)
+  const bootValue = await page.evaluate(() => {
+    const sel = document.getElementById('entry-select');
+    return [...sel.options].find((o) => o.textContent.includes('boot'))?.value;
+  });
+  expect(bootValue).toBeTruthy();
+  await page.selectOption('#entry-select', bootValue);
+  await page.waitForFunction(() => window.__cy.edges('.on-path').length > 0);
+
+  // target(itemHandler)をタップ → 経路上だが 2 ホップ先の boot が減光されてはならない
+  // (明るい経路が暗いノードを貫く見た目になる)
+  await page.evaluate(() => { window.__cy.getElementById(window.__graphTargetId).emit('tap'); });
+  const onPathDimmed = await page.evaluate(() =>
+    window.__cy.edges('.on-path').connectedNodes().some((n) => n.hasClass('dimmed')),
+  );
+  expect(onPathDimmed).toBeFalsy();
+});
+
+test('⑫ディバイダの掴み位置によらずドラッグ開始でパネル幅がジャンプしない', async ({ page }) => {
+  await page.goto(generate('callback', 'itemHandler'));
+  const before = await page.locator('#detail').evaluate((el) => el.getBoundingClientRect().width);
+  const box = await page.locator('#divider').boundingBox();
+  // ディバイダの左端(パネル左端から最も遠い位置)を掴んで 2px だけ動かす。
+  // 掴みオフセット未補正だとディバイダ幅ぶん(約 8px)のジャンプが乗る。
+  const startX = box.x + 1;
+  const startY = box.y + 10;
+  await page.mouse.move(startX, startY);
+  await page.mouse.down();
+  await page.mouse.move(startX - 2, startY, { steps: 2 });
+  await page.mouse.up();
+  const after = await page.locator('#detail').evaluate((el) => el.getBoundingClientRect().width);
+  expect(after - before).toBeLessThan(5);
+  expect(after - before).toBeGreaterThanOrEqual(0);
+});
+
+test('⑬閉状態のディバイダに col-resize カーソルが残らない', async ({ page }) => {
+  await page.goto(generate('callback', 'itemHandler'));
+  const openCursor = await page.locator('#divider').evaluate((el) => getComputedStyle(el).cursor);
+  expect(openCursor).toBe('col-resize');
+  await page.click('#detail-toggle');
+  await expect(page.locator('#detail')).toBeHidden();
+  const closedCursor = await page.locator('#divider').evaluate((el) => getComputedStyle(el).cursor);
+  expect(closedCursor).not.toBe('col-resize');
+});
+
+test('⑭参照グラフモード: variable ノードと reads エッジが描画されモードバナーが出る', async ({ page }) => {
+  await page.goto(generate('reference-graph', 'SETTINGS'));
+  await expect(page.locator('#graph canvas').first()).toBeVisible();
+  const targetKind = await page.evaluate(() =>
+    window.__cy.getElementById(window.__graphTargetId).data('kind'),
+  );
+  expect(targetKind).toBe('variable');
+  const readsEdges = await page.evaluate(() => window.__cy.edges('.reads').length);
+  expect(readsEdges).toBeGreaterThan(0);
+  await expect(page.locator('#banner .mode-line')).toContainText('参照グラフモード');
 });
