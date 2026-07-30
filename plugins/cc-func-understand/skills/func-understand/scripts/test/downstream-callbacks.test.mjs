@@ -8,6 +8,7 @@ import { resolveTarget } from '../lib/target-resolver.mjs';
 import { buildGraph } from '../lib/graph-builder.mjs';
 import { addDownstreamCallbacks } from '../lib/downstream-callbacks.mjs';
 import { addCallbackEdges } from '../lib/callback-edges.mjs';
+import { createFileExcluder } from '../lib/test-file-matcher.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.join(here, 'fixtures/downstream-callback');
@@ -69,4 +70,35 @@ test('パラメータの名前渡し items.map(cb) は誤検出されない', ()
   const g = analyze('applyEach');
   assert.ok(!byName(g, 'cb'), 'パラメータはリポ内関数宣言に解決されないため落ちる');
   assert.equal(g.nodes.filter((n) => n.internal).length, 1, 'applyEach 自身のみ');
+});
+
+test('downstreamDepth による打ち切り: 上限に達した包含ノードからは発見しない', () => {
+  // 深さ0: target 自身が上限に達しているため、本体からの発見を行わない
+  // (深さ1のケースは continueDownstream 側の制限だけでも normalize が出ないため、
+  //  発見側ガードの失敗テストとしては深さ0の境界を使う)
+  const g0 = analyze('target', { downstreamDepth: 0 }, { withUpstreamPass: false });
+  assert.ok(!byName(g0, 'helper'), '深さ0では target 本体からの発見も行わない');
+  const g1 = analyze('target', { downstreamDepth: 1 }, { withUpstreamPass: false });
+  assert.ok(byName(g1, 'helper'), '深さ1では target 直下の発見は行われる');
+  assert.ok(!byName(g1, 'normalize'), '発見された helper から先の探索は打ち切られる');
+});
+
+test('maxNodes 到達時はノード化せず truncation.frontier に積む', () => {
+  // buildGraph 段階で target / fmt / register の3ノードで予算を使い切る
+  const g = analyze('target', { maxNodes: 3 }, { withUpstreamPass: false });
+  assert.ok(!byName(g, 'helper'));
+  assert.equal(g.truncation.reason, 'max-nodes');
+  assert.ok(g.truncation.frontier.includes('helper'));
+});
+
+test('テスト除外ファイル内の宣言に解決される名前渡しは発見されない', () => {
+  const isFileExcluded = createFileExcluder(projectRoot, ['**/excluded.ts']);
+  const g = analyze('usesExcluded', { isFileExcluded });
+  assert.ok(!byName(g, 'exHelper'));
+});
+
+test('除外なしなら excluded.ts の exHelper も発見される(対照)', () => {
+  const g = analyze('usesExcluded');
+  assert.ok(byName(g, 'exHelper'));
+  assert.equal(byName(g, 'exHelper').downstreamDistance, 1);
 });

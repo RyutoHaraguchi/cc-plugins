@@ -68,6 +68,10 @@ export function addDownstreamCallbacks(ts, proj, graph, opts) {
   while (queue.length) {
     const node = queue.shift();
 
+    // 深さ打ち切り: 包含ノードが downstreamDepth に達していたら、その本体からの新規発見はしない
+    // (direct-call の下流打ち切りと同じ規則)
+    if (node.downstreamDistance >= ctx.downstreamDepth) continue;
+
     const sf = proj.program.getSourceFile(node._selection.file);
     if (!sf) continue;
     if (!argRefsByFile.has(sf.fileName)) argRefsByFile.set(sf.fileName, collectArgRefs(ts, sf));
@@ -84,12 +88,22 @@ export function addDownstreamCallbacks(ts, proj, graph, opts) {
         const decl = declByKey.get(`${def.fileName}#${def.textSpan.start}`);
         if (!decl) continue; // リポ内の関数様宣言に解決できない(パラメータ・変数・外部・stdlib 等)
 
+        if (ctx.isFileExcluded(decl.file)) continue; // テスト関連ファイル内の宣言はノード化しない
+
         const calleeId = `${decl.relFile}#${decl.selectionStart}`;
 
         // direct-call との二重計上防止: 同じ from→to の direct-call が同一行を記録済みならスキップ
         // (items.map(utils.fmt) のような PropertyAccess は outgoing calls が既に検出している)
         const dc = ctx.edges.get(`${node.id}->${calleeId}#direct-call`);
         if (dc && dc.callLines.includes(refLine)) continue;
+
+        // maxNodes 予算: 新規ノードを作れない場合は frontier に積んで打ち切りを知らせる
+        // (stepDirection / addCallbackEdges と同じパターン)
+        if (!ctx.nodes.has(calleeId) && ctx.nodes.size >= ctx.maxNodes) {
+          ctx.truncation ??= { reason: 'max-nodes', frontier: [] };
+          ctx.truncation.frontier.push(decl.name);
+          continue;
+        }
 
         const item = ctx.prepare(decl.file, decl.selectionStart);
         if (!item) continue;
