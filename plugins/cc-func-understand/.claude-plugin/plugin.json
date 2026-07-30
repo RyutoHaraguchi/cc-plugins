@@ -1,7 +1,7 @@
 {
   "name": "cc-func-understand",
   "description": "関数を軸に TS/JS の呼び出しグラフを静的解析し、自己完結のインタラクティブ HTML として可視化する",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "author": {
     "name": "ryutoharaguchi"
   },
