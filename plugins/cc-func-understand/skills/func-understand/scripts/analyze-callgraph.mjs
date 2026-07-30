@@ -8,6 +8,7 @@ import { loadTypeScript } from './lib/ts-loader.mjs';
 import { loadProject } from './lib/project-loader.mjs';
 import { resolveTarget } from './lib/target-resolver.mjs';
 import { buildGraph } from './lib/graph-builder.mjs';
+import { addDownstreamCallbacks } from './lib/downstream-callbacks.mjs';
 import { addCallbackEdges } from './lib/callback-edges.mjs';
 import { loadTestExclusions, createFileExcluder } from './lib/test-file-matcher.mjs';
 
@@ -135,6 +136,7 @@ export async function main(argv) {
   if (isFileExcluded) buildOpts.isFileExcluded = isFileExcluded;
 
   let graph = buildGraph(ts, proj, resolution.declaration, buildOpts);
+  graph = addDownstreamCallbacks(ts, proj, graph, { projectRoot });
   graph = addCallbackEdges(ts, proj, graph, { projectRoot });
 
   graph.meta = {

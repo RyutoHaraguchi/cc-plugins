@@ -158,3 +158,15 @@ test('test-exclusion: --include-tests + 壊れた --test-exclude では定義フ
   assert.ok(names.includes('callInTest'));
 });
 
+test('downstream-callback fixture: 名前渡しされた関数が下流ノード化される(統合)', () => {
+  const out = tmp();
+  const r = run(['--project', path.join(here, 'fixtures/downstream-callback'), '--function', 'target', '--out', out]);
+  assert.equal(r.code, 0);
+  const g = JSON.parse(fs.readFileSync(out, 'utf8'));
+  const helper = g.nodes.find((n) => n.name === 'helper');
+  assert.ok(helper, 'items.map(helper) の helper がノード化される');
+  assert.equal(helper.downstreamDistance, 1);
+  assert.ok(g.edges.some((e) => e.kind === 'callback-passed' && e.to === helper.id));
+  assert.ok(g.nodes.every((n) => !('_selection' in n)), '新ノードも _selection が strip される');
+});
+
