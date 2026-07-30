@@ -134,6 +134,11 @@ main {
   background: #21262d;
 }
 
+/* 閉状態ではリサイズできないため、リサイズ可能に見せない */
+#divider.panel-closed {
+  cursor: default;
+}
+
 #detail-toggle {
   position: absolute;
   top: 50%;

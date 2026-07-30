@@ -71,7 +71,14 @@ function applyDim() {
     dimFocus = null;
     return;
   }
-  cy.elements().not(focus.closedNeighborhood()).not('.on-path').addClass('dimmed');
+  // 経路ハイライト中はエッジ(.on-path)だけでなく経路上のノードも減光対象から外す。
+  // 外さないと 1 ホップ圏外の経路上ノードが減光され「明るい経路が暗いノードを貫く」見た目になる。
+  const onPathEdges = cy.edges('.on-path');
+  cy.elements()
+    .not(focus.closedNeighborhood())
+    .not(onPathEdges)
+    .not(onPathEdges.connectedNodes())
+    .addClass('dimmed');
 }
 
 function registerDagreLayout() {
@@ -370,6 +377,8 @@ function updateToggleUi() {
   detailToggle.textContent = open ? '▶' : '◀';
   detailToggle.setAttribute('aria-expanded', String(open));
   detailToggle.setAttribute('aria-label', open ? '詳細パネルを閉じる' : '詳細パネルを開く');
+  // 閉状態ではリサイズ不能なので col-resize カーソルを出さない(CSS 側で打ち消す)
+  divider.classList.toggle('panel-closed', !open);
 }
 
 function setPanelOpen(open) {
@@ -392,15 +401,25 @@ function clampPanelWidth(w) {
 // トグルボタン上の pointerdown はドラッグ開始にしない(クリックとの競合防止)
 detailToggle.addEventListener('pointerdown', (evt) => evt.stopPropagation());
 
+let resizePointerId = null; // ドラッグ中のポインタ id(マルチタッチでのリスナー二重登録防止)
+
 divider.addEventListener('pointerdown', (evt) => {
   if (detailPanel.hidden) return; // 閉じているときはリサイズしない
+  if (resizePointerId !== null) return; // 既に別のポインタでドラッグ中なら無視する
+  resizePointerId = evt.pointerId;
   evt.preventDefault();
   divider.setPointerCapture(evt.pointerId);
   document.body.classList.add('resizing');
+  // 掴んだ位置とパネル左端のずれを補正する(未補正だとディバイダ幅ぶん最大 8px 程度
+  // パネル幅がジャンプする)
+  const grabOffset = evt.clientX - detailPanel.getBoundingClientRect().left;
   const onMove = (moveEvt) => {
-    detailPanel.style.flexBasis = `${clampPanelWidth(window.innerWidth - moveEvt.clientX)}px`;
+    if (moveEvt.pointerId !== resizePointerId) return;
+    detailPanel.style.flexBasis = `${clampPanelWidth(window.innerWidth - (moveEvt.clientX - grabOffset))}px`;
   };
-  const finish = () => {
+  const finish = (endEvt) => {
+    if (endEvt.pointerId !== resizePointerId) return;
+    resizePointerId = null;
     divider.removeEventListener('pointermove', onMove);
     divider.removeEventListener('pointerup', finish);
     divider.removeEventListener('pointercancel', finish);
