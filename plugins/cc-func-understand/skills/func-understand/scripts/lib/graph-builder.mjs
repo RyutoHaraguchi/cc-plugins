@@ -248,6 +248,21 @@ export function continueUpstream(ts, proj, graph, startEntries) {
   return syncGraph(graph);
 }
 
+/**
+ * 下流方向(呼び出し先)の Call Hierarchy BFS を `startEntries` から再開/継続する。
+ * addDownstreamCallbacks が発見した「名前渡しされた関数」ノードからの下流継続に使う。
+ * continueUpstream の鏡像(stepDirection と visitedDown を共有)。
+ */
+export function continueDownstream(ts, proj, graph, startEntries) {
+  const ctx = graph._ctx;
+  const queue = [...startEntries];
+  for (const entry of queue) ctx.visitedDown.add(entry.node.id);
+  while (queue.length) {
+    stepDirection(ts, proj, ctx, 'down', queue.shift(), queue);
+  }
+  return syncGraph(graph);
+}
+
 export function buildGraph(ts, proj, targetDecl, opts) {
   const ctx = createGraphContext(ts, proj, opts);
 
