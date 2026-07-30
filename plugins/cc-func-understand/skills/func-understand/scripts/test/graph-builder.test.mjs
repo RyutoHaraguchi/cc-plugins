@@ -153,3 +153,14 @@ test('test-exclusion: isFileExcluded 未指定なら従来どおり全ノード�
   assert.ok(byName(g, 'callInTest'));
   assert.ok(byName(g, 'helperCall'));
 });
+
+test('test-exclusion: node_modules 配下に解決される外部境界ノードは testExclude グロブに偶然マッチしても落ちない', () => {
+  const projectRoot = path.join(here, 'fixtures', 'test-exclusion');
+  // ext-pkg の型解決先は node_modules/ext-pkg/test/index.d.ts で "**/test/**" にマッチするが、
+  // 除外対象はプロジェクト内部のテストファイルのみであり、外部境界ノードは残るべき
+  const isFileExcluded = createFileExcluder(projectRoot, ['**/*.test.*', '**/__tests__/**', '**/test/**']);
+  const g = graphFor('test-exclusion', 'decorate', { isFileExcluded });
+  const boundary = byName(g, 'extify');
+  assert.ok(boundary, 'node_modules 配下の extify が外部境界ノードとして残る');
+  assert.equal(boundary.kind, 'external-boundary');
+});

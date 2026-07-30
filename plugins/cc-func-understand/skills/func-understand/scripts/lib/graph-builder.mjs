@@ -30,7 +30,12 @@ function lineOf(sourceFile, pos) {
  * addCallbackEdges から continueUpstream 経由で再利用される。
  */
 function createGraphContext(ts, proj, opts) {
-  const { projectRoot, maxNodes = 300, upstreamDepth = Infinity, downstreamDepth = Infinity, isFileExcluded = () => false } = opts;
+  const { projectRoot, maxNodes = 300, upstreamDepth = Infinity, downstreamDepth = Infinity, isFileExcluded: rawIsFileExcluded = () => false } = opts;
+  // テスト除外の対象はプロジェクト内部ファイルのみ。node_modules 配下(外部境界)の解決先が
+  // testExclude グロブ(例: **/test/**)に偶然マッチしても境界ノードを落とさない。
+  // ctx.isFileExcluded は stepDirection / addCallbackEdges / addDownstreamCallbacks の
+  // 全適用箇所から参照される単一のチョークポイントなので、ガードはここに置く。
+  const isFileExcluded = (file) => proj.isInternal(file) && rawIsFileExcluded(file);
   const nodes = new Map(); // id -> node
   const edges = new Map(); // `${from}->${to}#${kind}` -> edge (callLines をマージ)
   let extSeq = 0;
