@@ -59,11 +59,9 @@ test('発見された helper の下流(normalize)が direct-call で継続探索
 });
 
 test('複数行にまたがる PropertyAccess 引数(items.map(utils\\n.fmt)) も direct-call のみで二重計上されない', () => {
-  // withUpstreamPass: false — addCallbackEdges(後段の上流パス)は callback-edges.mjs 内に
-  // 独自の行完全一致ベースの二重計上防止(directCallMarkers)を持ち、これは本修正の対象外
-  // (今回の指摘は addDownstreamCallbacks/collectArgRefs のみ)。ここでは addDownstreamCallbacks
-  // 単体の挙動を検証する。
-  const g = analyze('multiline', {}, { withUpstreamPass: false });
+  // 上流パス(addCallbackEdges)込みの統合状態でも1本になることを検証する
+  // (上流パス側の範囲照合修正は issue #15 / #22 で対応済み)
+  const g = analyze('multiline');
   const edges = edgesBetween(g, byName(g, 'multiline'), byName(g, 'fmt'));
   assert.equal(edges.length, 1);
   assert.equal(edges[0].kind, 'direct-call');
