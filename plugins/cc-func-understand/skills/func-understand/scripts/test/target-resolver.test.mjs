@@ -108,3 +108,20 @@ test('not-a-function でも --file/--line で絞り込みが効く(指定ファ�
   assert.equal(r2.status, 'not-a-function');
   assert.equal(r2.matches.length, 1);
 });
+
+test('not-a-function の --line 絞り込み: 同名変数が複数ファイル/複数行にあるとき行で一意に絞れる', () => {
+  const { root, proj: p } = proj('not-a-function');
+  // 絞り込みなしでは site-a.ts / site-b.ts の 2 件がマッチする
+  const all = resolveTarget(ts, p, { functionName: 'SITE_LIMIT' }, root);
+  assert.equal(all.status, 'not-a-function');
+  assert.equal(all.matches.length, 2);
+  const siteB = all.matches.find((m) => m.relFile === 'src/site-b.ts');
+  assert.ok(siteB.startLine > 1, 'site-b.ts 側はパディングにより行番号がずれている(--line で区別できる前提)');
+  // --line 指定で site-b.ts 側の 1 件に絞れる
+  const r = resolveTarget(ts, p, { functionName: 'SITE_LIMIT', line: siteB.startLine }, root);
+  assert.equal(r.status, 'not-a-function');
+  assert.equal(r.matches.length, 1);
+  assert.equal(r.matches[0].relFile, 'src/site-b.ts');
+  // どの宣言の行範囲にも入らない行を指定すると not-found
+  assert.equal(resolveTarget(ts, p, { functionName: 'SITE_LIMIT', line: 999 }, root).status, 'not-found');
+});

@@ -75,6 +75,33 @@ test('後段 addCallbackEdges が新ノード helper への上流(otherUser)も�
   assert.equal(cb.length, 1);
 });
 
+test('new Foo(helper)(NewExpression 引数位置)の名前渡しも発見され、CallExpression 側と行マージされる', () => {
+  const g = analyze('buildsService', {}, { withUpstreamPass: false });
+  const helper = byName(g, 'helper');
+  assert.ok(helper, 'new Svc(helper) の helper がノード化される');
+  assert.equal(helper.downstreamDistance, 1);
+  const cb = edgesBetween(g, byName(g, 'buildsService'), helper).filter((e) => e.kind === 'callback-passed');
+  assert.equal(cb.length, 1, '同じ from→to は 1 本のエッジにマージされる');
+  assert.equal(cb[0].callLines.length, 2, 'items.map(helper) 行と new Svc(helper) 行の両方が記録される');
+});
+
+test('オブジェクトリテラル経由の名前渡しは下流パスでは発見されない(既存ノードのみ検出のドキュメント主張)', () => {
+  // objLiteralUser は { fn: helper } で helper を渡すが、CallExpression/NewExpression の
+  // 引数位置ではないため下流パス(collectArgRefs)の対象外。helper はグラフに載らない。
+  const g = analyze('objLiteralUser');
+  assert.ok(!byName(g, 'helper'), 'オブジェクトリテラル経由では helper が発見されない');
+});
+
+test('オブジェクトリテラル経由の参照は、渡された関数が既にグラフに載っていれば上流パスで検出される(対照)', () => {
+  // helper を起点にすると helper は当然グラフ上にあり、findReferences ベースの上流パスが
+  // { fn: helper } の参照から objLiteralUser を callback-passed でノード化する。
+  const g = analyze('helper');
+  const objUser = byName(g, 'objLiteralUser');
+  assert.ok(objUser, 'helper 起点なら objLiteralUser が上流ノード化される');
+  const cb = edgesBetween(g, objUser, byName(g, 'helper')).filter((e) => e.kind === 'callback-passed');
+  assert.equal(cb.length, 1);
+});
+
 test('パラメータの名前渡し items.map(cb) は誤検出されない', () => {
   const g = analyze('applyEach');
   assert.ok(!byName(g, 'cb'), 'パラメータはリポ内関数宣言に解決されないため落ちる');

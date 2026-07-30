@@ -27,3 +27,16 @@ export function multiline(items: string[]): string[] {
       .fmt,
   );                                    // 複数行 PropertyAccess(direct-call との二重計上防止の確認用)
 }
+
+export class Svc {
+  constructor(private fn: Fn) {}
+}
+
+export function buildsService(items: string[]): Svc {
+  items.map(helper);                    // CallExpression 引数位置の名前渡し
+  return new Svc(helper);               // NewExpression 引数位置の名前渡し(同一エッジへの行マージ確認用)
+}
+
+export function objLiteralUser(): { fn: Fn } {
+  return { fn: helper };                // オブジェクトリテラル経由(CallExpression 引数ではないため下流パスでは発見されない)
+}
