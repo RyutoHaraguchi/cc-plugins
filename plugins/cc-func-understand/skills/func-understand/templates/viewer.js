@@ -121,7 +121,7 @@ function buildElements() {
       elements.push({
         group: 'edges',
         data: { id: e._id, source: e.from, target: e.to, kind: e.kind },
-        classes: e.kind === 'callback-passed' ? 'callback' : '',
+        classes: e.kind === 'callback-passed' ? 'callback' : e.kind === 'reads' ? 'reads' : '',
       });
     }
   }
@@ -168,6 +168,10 @@ const CY_STYLE = [
     },
   },
   {
+    selector: 'node[kind="variable"], node[kind="enum"]',
+    style: { 'border-color': '#d29922', 'border-width': 2, 'border-style': 'double' },
+  },
+  {
     selector: 'node.search-hit',
     style: { 'border-color': '#d29922', 'border-width': 4 },
   },
@@ -186,6 +190,15 @@ const CY_STYLE = [
   {
     selector: 'edge.callback',
     style: { 'line-style': 'dashed', label: 'callback' },
+  },
+  {
+    selector: 'edge.reads',
+    style: {
+      'line-style': 'dotted',
+      label: 'reads',
+      'line-color': '#a371f7',
+      'target-arrow-color': '#a371f7',
+    },
   },
   {
     selector: 'edge.on-path',
@@ -592,6 +605,13 @@ function buildBanner() {
   const meta = graph.meta ?? {};
   metaLine.textContent = `TS ${meta.tsVersion ?? '?'} (${meta.tsSource ?? ''}) / ${meta.tsconfig ?? '既定設定'}`;
   banner.appendChild(metaLine);
+
+  if (meta.mode === 'reference') {
+    const modeLine = document.createElement('div');
+    modeLine.className = 'mode-line';
+    modeLine.textContent = '参照グラフモード: 変数起点・上流のみ(この変数を読む関数とその呼び出し元)';
+    banner.appendChild(modeLine);
+  }
 
   if (meta.limitations && meta.limitations.length > 0) {
     const ul = document.createElement('ul');

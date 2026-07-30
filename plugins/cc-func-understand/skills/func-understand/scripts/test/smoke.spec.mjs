@@ -236,3 +236,15 @@ test('⑬閉状態のディバイダに col-resize カーソルが残らない',
   const closedCursor = await page.locator('#divider').evaluate((el) => getComputedStyle(el).cursor);
   expect(closedCursor).not.toBe('col-resize');
 });
+
+test('⑭参照グラフモード: variable ノードと reads エッジが描画されモードバナーが出る', async ({ page }) => {
+  await page.goto(generate('reference-graph', 'SETTINGS'));
+  await expect(page.locator('#graph canvas').first()).toBeVisible();
+  const targetKind = await page.evaluate(() =>
+    window.__cy.getElementById(window.__graphTargetId).data('kind'),
+  );
+  expect(targetKind).toBe('variable');
+  const readsEdges = await page.evaluate(() => window.__cy.edges('.reads').length);
+  expect(readsEdges).toBeGreaterThan(0);
+  await expect(page.locator('#banner .mode-line')).toContainText('参照グラフモード');
+});
