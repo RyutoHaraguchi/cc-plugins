@@ -130,6 +130,48 @@ export function collectNonFunctionDeclarations(ts, proj, name) {
   return matches;
 }
 
+/**
+ * モジュールスコープの値宣言(変数・enum)から指定名に一致するものを収集する。
+ * 参照グラフモード(resolved-variable)の起点解決に使う。
+ * - 変数は SourceFile 直下の VariableStatement のみ(関数内ローカル・catch 節・
+ *   for-of ループ変数は対象外 → 指定時は not-found に落ちる)
+ * - アロー関数/関数式を初期化子に持つ変数は関数宣言(collectDeclarations 側)の
+ *   担当なので対象外
+ * relFile はここでは計算しない(呼び出し側で projectRoot を使って解決する)。
+ */
+export function collectModuleValueDeclarations(ts, proj, name) {
+  const matches = [];
+  const entry = (sf, rangeNode, nameNode, kind) => {
+    const start = sf.getLineAndCharacterOfPosition(rangeNode.getStart(sf));
+    const end = sf.getLineAndCharacterOfPosition(rangeNode.getEnd());
+    return {
+      file: sf.fileName,
+      relFile: null,
+      name: nameNode.text,
+      kind,
+      selectionStart: nameNode.getStart(sf),
+      startLine: start.line + 1,
+      endLine: end.line + 1,
+      signature: sf.text.slice(rangeNode.getStart(sf), rangeNode.getEnd()).split('\n')[0].slice(0, 120),
+    };
+  };
+  for (const sf of proj.program.getSourceFiles()) {
+    if (!proj.isInternal(sf.fileName)) continue;
+    for (const stmt of sf.statements) {
+      if (ts.isVariableStatement(stmt)) {
+        for (const decl of stmt.declarationList.declarations) {
+          if (!ts.isIdentifier(decl.name) || decl.name.text !== name) continue;
+          if (decl.initializer && (ts.isArrowFunction(decl.initializer) || ts.isFunctionExpression(decl.initializer))) continue;
+          matches.push(entry(sf, stmt, decl.name, 'variable'));
+        }
+      } else if (ts.isEnumDeclaration(stmt) && stmt.name.text === name) {
+        matches.push(entry(sf, stmt, stmt.name, 'enum'));
+      }
+    }
+  }
+  return matches;
+}
+
 export function resolveTarget(ts, proj, { functionName, file, line }, projectRoot) {
   const name = functionName.replace(/\(\)\s*$/, '').trim();
   const decls = collectDeclarations(ts, proj).map((d) => ({

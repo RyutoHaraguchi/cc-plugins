@@ -5,7 +5,7 @@ import { classifySymbolFile } from './symbol-classifier.mjs';
 const MAX_CODE_BYTES = 16 * 1024;
 const MODULE_EXCERPT_LINES = 10;
 
-function truncateCode(text) {
+export function truncateCode(text) {
   const bytes = Buffer.byteLength(text, 'utf8');
   if (bytes <= MAX_CODE_BYTES) return { code: text, codeTruncated: false };
   // バイト単位で安全に切る(マルチバイト文字の途中で切れないよう Buffer 経由で丸める)
@@ -29,7 +29,7 @@ function lineOf(sourceFile, pos) {
  * 返り値は graph オブジェクトの非列挙プロパティ `_ctx` として保持され、
  * addCallbackEdges から continueUpstream 経由で再利用される。
  */
-function createGraphContext(ts, proj, opts) {
+export function createGraphContext(ts, proj, opts) {
   const { projectRoot, maxNodes = 300, upstreamDepth = Infinity, downstreamDepth = Infinity, isFileExcluded: rawIsFileExcluded = () => false } = opts;
   // テスト除外の対象はプロジェクト内部ファイルのみ。node_modules 配下(外部境界)の解決先が
   // testExclude グロブ(例: **/test/**)に偶然マッチしても境界ノードを落とさない。

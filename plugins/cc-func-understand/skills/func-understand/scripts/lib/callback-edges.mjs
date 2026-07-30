@@ -9,7 +9,7 @@ function lineOf(sourceFile, pos) {
 }
 
 /** pos を含む最も深いノード(getTouchingToken 相当)を再帰探索で求める */
-function findNodeAt(ts, sourceFile, pos) {
+export function findNodeAt(ts, sourceFile, pos) {
   let result = null;
   const visit = (node) => {
     if (pos < node.getStart(sourceFile) || pos >= node.getEnd()) return;
@@ -21,7 +21,7 @@ function findNodeAt(ts, sourceFile, pos) {
 }
 
 /** 参照位置の祖先に ImportDeclaration/ExportDeclaration/ImportEqualsDeclaration があるか */
-function isInImportOrExport(ts, node) {
+export function isInImportOrExport(ts, node) {
   for (let n = node; n; n = n.parent) {
     if (ts.isImportDeclaration(n) || ts.isExportDeclaration(n) || ts.isImportEqualsDeclaration(n)) return true;
   }
@@ -97,7 +97,7 @@ function isCallbackSourceNode(node) {
 }
 
 /** ファイル全体を表す擬似 CallHierarchyItem(module ノード新設用)。TS が返す実物と同じ形にする。 */
-function moduleItem(sourceFile) {
+export function moduleItem(sourceFile) {
   return {
     file: sourceFile.fileName,
     kind: 'module',
