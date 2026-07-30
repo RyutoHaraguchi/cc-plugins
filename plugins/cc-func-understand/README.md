@@ -9,7 +9,7 @@ TypeScript/JavaScript プロジェクト内の **1 関数を軸に呼び出し�
 - **`/func-understand` スラッシュコマンド** — 関数名を指定してグラフ解析を起動
 - **`func-understand` skill** — 「この関数の呼び出し関係を可視化して」等の自然言語からも起動
 - **静的解析ベース** — TypeScript Compiler API を用いた実装ファイル解析(実行時トレースではない)
-- **参照グラフモード** — モジュールレベルの変数・enum を指定すると自動フォールバックし、その変数・enum を読む関数(`reads` エッジ)とその上流の呼び出し元だけを辿るグラフを生成する(下流方向は無し)
+- **参照グラフモード** — モジュールレベルの変数・enum を指定すると自動フォールバックし、その変数・enum を読む関数(`reads` エッジ)とその上流の呼び出し元だけを辿るグラフを生成する(下流方向は無し)。型注釈・`typeof` など型位置での参照も reads として計上される
 - **AI 要約** — 起点から距離 2 以内の内部ノードに 1〜3 行の日本語要約を自動付与
 - **自己完結 HTML** — 依存ライブラリを全てインライン化した単一 HTML ファイル(ネットワーク接続不要、~800KB程度)
 - **デフォルト出力先** — `<project-root>/docs/func-understand/YYYY-MM-DD-HHMM-<関数名>.html`
@@ -62,7 +62,7 @@ getUser 関数の呼び出しグラフを見せて
 - **テスト関連ファイルはデフォルトで除外される**: 初回実行時に対象リポのテスト設定(jest / vitest / Playwright 等)から除外パターンを推定し、`<project-root>/.func-understand.json` に保存する(git 追跡外・ローカル生成物)。以降はこの定義に従い `*.test.ts` や `__tests__/` などがグラフから除外される。テスト込みで解析したい場合は `--include-tests`、パターンを調整したい場合は `.func-understand.json` の `testExclude` を編集する。起点関数がテストファイル内にある場合は除外が自動で無効化される。
 - **project references / ビルド成果物をまたぐ呼び出し**: モノレポ構成で `tsconfig.json` の `references` を跨ぐ呼び出しや、ビルド後の成果物経由の呼び出しは境界ノードとして表現され、そこで経路が途切れる。`--tsconfig` で対象の tsconfig を明示すると改善する場合がある。
 - **匿名関数**: 名前を持たない関数式・アロー関数は解析対象として直接指定できない。
-- **参照グラフの起点にできない宣言**: 関数内ローカル変数(catch 節・for-of/for-in のループ変数を含む)・class・interface・type・関数スコープ(ネスト)の enum は参照グラフの起点にできない。関数内ローカル変数は not-found、class/interface/type と関数スコープの enum は not-a-function として扱われる(モジュールレベルの enum は参照グラフモードの起点にできる)。
+- **参照グラフの起点にできない宣言**: 関数内ローカル変数(catch 節・for-of/for-in のループ変数を含む)・class・interface・type・モジュールスコープでない enum(関数内・namespace 内など)は参照グラフの起点にできない。関数内ローカル変数は not-found、class/interface/type とモジュールスコープでない enum は not-a-function として扱われる(モジュールレベルの enum は参照グラフモードの起点にできる)。
 - **TypeScript 7 系**: プロジェクトが TypeScript 7 系を使用している場合、同梱の TypeScript 5 系にフォールバックして解析する(解析結果に軽微な差異が生じ得る)。
 
 ## 必要環境

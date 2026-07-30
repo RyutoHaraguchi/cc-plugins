@@ -51,7 +51,7 @@ export function isInImportOrExport(ts, node) {
  * であり、CallExpression はここでの透過対象に含まれないため、この関数は
  * false を返す(=除外されず従来どおり callback-passed として検出される)。
  */
-function isExportAssignmentTarget(ts, node) {
+export function isExportAssignmentTarget(ts, node) {
   let n = node;
   while (
     n.parent &&

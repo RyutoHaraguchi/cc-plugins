@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { collectDeclarations } from './target-resolver.mjs';
 import { createGraphContext, syncGraph, continueUpstream, truncateCode } from './graph-builder.mjs';
-import { findNodeAt, isInImportOrExport, moduleItem } from './callback-edges.mjs';
+import { findNodeAt, isInImportOrExport, isExportAssignmentTarget, moduleItem } from './callback-edges.mjs';
 
 function lineOf(sourceFile, pos) {
   return sourceFile.getLineAndCharacterOfPosition(pos).line + 1;
@@ -72,6 +72,7 @@ export function buildReferenceGraph(ts, proj, targetDecl, opts) {
       const refNode = findNodeAt(ts, refSf, ref.textSpan.start);
       if (!refNode) continue;
       if (isInImportOrExport(ts, refNode)) continue;
+      if (isExportAssignmentTarget(ts, refNode)) continue;
 
       const refLine = lineOf(refSf, ref.textSpan.start);
       const enclosing = findEnclosingDecl(refSf, ref.textSpan.start);

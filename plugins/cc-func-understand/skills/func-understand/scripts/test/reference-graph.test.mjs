@@ -91,6 +91,14 @@ test('enum も起点にでき、読み取り関数へ reads エッジが張ら�
   assert.ok(edgesBetween(g, picker, target).some((e) => e.kind === 'reads'));
 });
 
+test('型位置のみの参照(型注釈)も reads エッジになる', () => {
+  const g = analyze('Mode');
+  const describe = byName(g, 'describeMode');
+  assert.ok(describe, '型注釈でのみ Mode を参照する describeMode もノード化される');
+  const reads = edgesBetween(g, describe, g.nodes.find((n) => n.id === g.target)).filter((e) => e.kind === 'reads');
+  assert.equal(reads.length, 1);
+});
+
 test('テスト除外ファイル内の参照はノード化されない', () => {
   const isFileExcluded = createFileExcluder(projectRoot, ['**/excluded-reader.ts']);
   const g = analyze('SETTINGS', { isFileExcluded });
@@ -100,6 +108,12 @@ test('テスト除外ファイル内の参照はノード化されない', () =>
 test('除外なしなら exReader も乗る(対照)', () => {
   const g = analyze('SETTINGS');
   assert.ok(byName(g, 'exReader'));
+});
+
+test('`export default SETTINGS;` の裸の再エクスポートは reads エッジにならない', () => {
+  const g = analyze('SETTINGS');
+  const mod = g.nodes.find((n) => n.kind === 'module' && n.name === 'src/reexport.ts');
+  assert.equal(mod, undefined, 'reexport.ts は export default の対象以外に SETTINGS を参照していないため module ノード化されないはず');
 });
 
 test('maxNodes 到達時はノード化せず truncation.frontier に積む', () => {

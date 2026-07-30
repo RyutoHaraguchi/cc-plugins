@@ -67,12 +67,12 @@ node <skill>/scripts/analyze-callgraph.mjs \
 stdout の JSON と exit code で分岐する:
 
 - **exit 2, `status: "ambiguous"`**: `candidates` の各要素をラベル `relFile:startLine (containerName)` として AskUserQuestion で提示し、ユーザーに選ばせる。`containerName` が null/未設定の候補は括弧部分を省略し `relFile:startLine` とする。AskUserQuestion の `label` はこの短いラベルのみにとどめ、`signature` など詳細情報は `description` 側に入れる。選択された候補の `relFile` と `startLine` を `--file` `--line` として付与し、同じコマンドを再実行する。`candidates` には関数だけでなく kind `variable`/`enum` の候補が混ざることがある(同名のモジュールレベル変数・enum が複数存在する場合)が、再実行の手順は同じ。
-- **exit 2, `status: "not-a-function"`**: 指定名は実在するが関数ではない。`matches` の各要素を使い「`NAME` は kind(class/interface/type/enum)として `relFile:startLine` に実在しますが、関数ではないため呼び出しグラフの起点にできません」とユーザーに説明する(複数一致時はすべて列挙)。モジュールレベルの変数・enum を指定した場合は参照グラフモードとして自動解析されるためこのステータスにはならないが、**関数スコープ(ネスト)の enum のみ**は引き続き `not-a-function`(kind: `enum`)になる。`suggestions` が空でなければ候補として提示し、関数名の再入力を促す(AskUserQuestion または自由入力での確認)。
+- **exit 2, `status: "not-a-function"`**: 指定名は実在するが関数ではない。`matches` の各要素を使い「`NAME` は kind(class/interface/type/enum)として `relFile:startLine` に実在しますが、関数ではないため呼び出しグラフの起点にできません」とユーザーに説明する(複数一致時はすべて列挙)。モジュールレベルの変数・enum を指定した場合は参照グラフモードとして自動解析されるためこのステータスにはならないが、**モジュールスコープでない enum(関数内・namespace 内など)**は引き続き `not-a-function`(kind: `enum`)になる。`suggestions` が空でなければ候補として提示し、関数名の再入力を促す(AskUserQuestion または自由入力での確認)。
 - **exit 2, `status: "not-found"`**: `suggestions` が空の場合、解決された tsconfig が solution-style(`files: []` + `references` のみ — Vite の TS scaffold 標準)である可能性を確認し、`--tsconfig tsconfig.app.json`(または `references` が指す設定)を付けて再実行する。それでも解決しない場合に、`suggestions` を提示して関数名の再入力を促す(AskUserQuestion または自由入力での確認)。関数内ローカル変数(catch 節・for-of/for-in のループ変数を含む)を指定した場合もこのステータスになる(参照グラフの起点にできるのはモジュールレベルの変数・enum のみ)。
 - **exit 0, `status: "ok"`**:
   - `truncated: true` の場合、生成自体は続行してよいが、最終報告時に「グラフが `--max-nodes` 等の上限で打ち切られたため、`--upstream-depth`/`--downstream-depth` を指定して再実行すると全体像を確認できる」旨を提案する。
   - モノレポ構成などで期待される呼び出し元(upstream)がプロジェクト境界ノードで途切れていると思われる場合、ルート/参照先の `tsconfig.json` を `--tsconfig` に指定して再実行するよう案内する。
-  - stdout のトップレベル(`status` の隣)、および graph.json の `meta` に `mode: "reference"` が付いている場合は**参照グラフモード**(指定名がモジュールレベルの変数・enum として解決された場合の自動フォールバック)。グラフは「指定した変数・enum を読む関数(`reads` エッジ)とその上流の呼び出し元」であり、下流方向のノードは存在しない。`--downstream-depth` を付けてもエラーにはならず単に無視される。
+  - stdout のトップレベル(`status` の隣)、および graph.json の `meta` に `mode: "reference"` が付いている場合は**参照グラフモード**(指定名がモジュールレベルの変数・enum として解決された場合の自動フォールバック)。グラフは「指定した変数・enum を読む関数(`reads` エッジ)とその上流の呼び出し元」であり、下流方向のノードは存在しない。`--downstream-depth` を付けてもエラーにはならず単に無視される。型位置での参照(`function f(m: Mode)` の型注釈、`typeof SETTINGS` など)も reads として計上されるため、enum を起点にした場合は型注釈での参照が多数を占めることがある。
 - **exit 1**: stderr のエラーメッセージ(不正な数値フラグなどを含む)をそのままユーザーに伝え、原因を修正して再実行する。ただし solution-style tsconfig(`files: []` + `references` のみ)を示すメッセージの場合は、ユーザーに差し戻さず `--tsconfig tsconfig.app.json`(または `references` が指す設定)を付けてその場で自動的に再実行する。
 
 ## 4. AI 要約

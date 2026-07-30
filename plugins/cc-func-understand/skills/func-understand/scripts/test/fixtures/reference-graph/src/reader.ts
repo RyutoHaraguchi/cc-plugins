@@ -8,6 +8,10 @@ export function pickMode(): Mode {
   return Mode.Fast;                     // enum の読み取り(reads)
 }
 
+export function describeMode(m: Mode): string {
+  return "mode";                        // 型注釈のみの参照(reads になるか検証用)
+}
+
 export function localShadow(): number {
   const SETTINGS = { retries: 9 };      // 同名ローカル(別シンボルなので拾われない)
   return SETTINGS.retries;
