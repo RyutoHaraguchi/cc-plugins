@@ -62,7 +62,7 @@ getUser 関数の呼び出しグラフを見せて
 - **テスト関連ファイルはデフォルトで除外される**: 初回実行時に対象リポのテスト設定(jest / vitest / Playwright 等)から除外パターンを推定し、`<project-root>/.func-understand.json` に保存する(git 追跡外・ローカル生成物)。以降はこの定義に従い `*.test.ts` や `__tests__/` などがグラフから除外される。テスト込みで解析したい場合は `--include-tests`、パターンを調整したい場合は `.func-understand.json` の `testExclude` を編集する。起点関数がテストファイル内にある場合は除外が自動で無効化される。
 - **project references / ビルド成果物をまたぐ呼び出し**: モノレポ構成で `tsconfig.json` の `references` を跨ぐ呼び出しや、ビルド後の成果物経由の呼び出しは境界ノードとして表現され、そこで経路が途切れる。`--tsconfig` で対象の tsconfig を明示すると改善する場合がある。
 - **匿名関数**: 名前を持たない関数式・アロー関数は解析対象として直接指定できない。
-- **参照グラフの起点にできない宣言**: 関数内ローカル変数(catch 節・for-of/for-in のループ変数を含む)・class・interface・type は参照グラフの起点にできない。関数内ローカル変数は not-found、class/interface/type は not-a-function として扱われる。
+- **参照グラフの起点にできない宣言**: 関数内ローカル変数(catch 節・for-of/for-in のループ変数を含む)・class・interface・type・関数スコープ(ネスト)の enum は参照グラフの起点にできない。関数内ローカル変数は not-found、class/interface/type と関数スコープの enum は not-a-function として扱われる(モジュールレベルの enum は参照グラフモードの起点にできる)。
 - **TypeScript 7 系**: プロジェクトが TypeScript 7 系を使用している場合、同梱の TypeScript 5 系にフォールバックして解析する(解析結果に軽微な差異が生じ得る)。
 
 ## 必要環境
