@@ -71,11 +71,11 @@ test('④XSS fixture のコードが実行されない', async ({ page }) => {
   expect(executed).toBeUndefined();
 });
 
-test('⑤エッジが taxi ルーティングで描画される', async ({ page }) => {
+test('⑤エッジが直交ルーティング(segments)で描画される', async ({ page }) => {
   await page.goto(generate('callback', 'itemHandler'));
   await expect(page.locator('#graph canvas').first()).toBeVisible();
   const curveStyle = await page.evaluate(() => window.__cy.edges().first().style('curve-style'));
-  expect(curveStyle).toBe('taxi');
+  expect(curveStyle).toBe('segments');
 });
 
 test('⑥ノードタップで非近傍が減光され、背景タップで解除される', async ({ page }) => {
@@ -285,4 +285,204 @@ test('⑯短いノードでは code-bar が出ない', async ({ page }) => {
   await page.evaluate(() => window.__showDetail(window.__graphTargetId));
   await expect(page.locator('#detail pre code')).not.toBeEmpty();
   await expect(page.locator('#detail .code-bar')).toBeHidden();
+});
+
+/**
+ * 画面に出ている線そのものを真値としてエッジの幾何を集計する(ページ内で実行)。
+ *
+ * viewer が自前で保存した経路(`scratch('_route')`)ではなく cytoscape が返す端点と
+ * segment points を使う。こうしないと segment-weights / segment-distances への変換を
+ * 間違えても検証が通ってしまう。両者の一致自体は routeMismatches で別に見る。
+ */
+function edgeGeometryReport() {
+  const cy = window.__cy;
+  const boxes = cy.nodes().map((n) => ({ id: n.id(), bb: n.boundingBox() }));
+  const crossesBox = (a, b, box) => {
+    const steps = 300;
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      const x = a.x + (b.x - a.x) * t;
+      const y = a.y + (b.y - a.y) * t;
+      if (x > box.bb.x1 + 0.5 && x < box.bb.x2 - 0.5 && y > box.bb.y1 + 0.5 && y < box.bb.y2 - 0.5) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  const crossings = [];
+  const diagonals = [];
+  const routeMismatches = [];
+  const verticals = [];
+  const skipped = [];
+
+  cy.edges().forEach((e) => {
+    const route = e.scratch('_route');
+    if (!route) {
+      // 経路を持たないのは自己ループだけのはず。数えておかないと、経路生成が丸ごと
+      // 壊れたときに「違反 0 件」で検証が空振りする。
+      skipped.push(e.id());
+      return;
+    }
+    const expected = route.slice(1, -1);
+    const drawn = e.style('curve-style') === 'segments' ? e.segmentPoints() : [];
+    if (drawn.length !== expected.length) {
+      routeMismatches.push(`${e.id()}: 点数 ${drawn.length} != ${expected.length}`);
+    } else {
+      for (let i = 0; i < expected.length; i++) {
+        const gap = Math.max(
+          Math.abs(drawn[i].x - expected[i].x),
+          Math.abs(drawn[i].y - expected[i].y),
+        );
+        if (gap > 0.5) {
+          routeMismatches.push(`${e.id()}[${i}]: ${gap.toFixed(2)}px ずれ`);
+          break;
+        }
+      }
+    }
+
+    // 端点は未描画だと null を返すことがある。落とすと区間が検証対象から消えて
+    // テストが空振りするため、その場合はノード中心で埋める(経路の先頭/末尾は
+    // ノード中心と同じ y の水平線なので中心を使っても区間の向きは変わらない)。
+    const srcEnd = e.sourceEndpoint();
+    const tgtEnd = e.targetEndpoint();
+    const path = [
+      srcEnd && Number.isFinite(srcEnd.x) ? srcEnd : e.source().position(),
+      ...drawn,
+      tgtEnd && Number.isFinite(tgtEnd.x) ? tgtEnd : e.target().position(),
+    ];
+
+    for (let i = 0; i + 1 < path.length; i++) {
+      const a = path[i];
+      const b = path[i + 1];
+      if (Math.abs(a.x - b.x) > 0.5 && Math.abs(a.y - b.y) > 0.5) diagonals.push(`${e.id()}[${i}]`);
+      if (Math.abs(a.x - b.x) < 0.5 && Math.abs(a.y - b.y) > 1) {
+        verticals.push({ id: e.id(), x: a.x, y1: Math.min(a.y, b.y), y2: Math.max(a.y, b.y) });
+      }
+      for (const box of boxes) {
+        if (box.id === e.data('source') || box.id === e.data('target')) continue;
+        if (crossesBox(a, b, box)) {
+          crossings.push(`${e.id()} -> ${box.id}`);
+          break;
+        }
+      }
+    }
+  });
+
+  const overlappingVerticals = [];
+  for (let i = 0; i < verticals.length; i++) {
+    for (let j = i + 1; j < verticals.length; j++) {
+      const a = verticals[i];
+      const b = verticals[j];
+      if (Math.abs(a.x - b.x) < 0.5 && Math.min(a.y2, b.y2) - Math.max(a.y1, b.y1) > 1) {
+        overlappingVerticals.push(`${a.id} / ${b.id}`);
+      }
+    }
+  }
+
+  return {
+    edges: cy.edges().length,
+    crossings,
+    diagonals,
+    routeMismatches,
+    overlappingVerticals,
+    skipped,
+    verticalCount: verticals.length,
+  };
+}
+
+async function geometryOf(page, fixture, fn) {
+  await page.goto(generate(fixture, fn));
+  await page.waitForFunction(() => window.__cy && window.__cy.edges().length > 0);
+  await page.click('#expand-all');
+  return page.evaluate(edgeGeometryReport);
+}
+
+// cycle は逆向き(循環)エッジ、kinds は module/class/method 混在を含む
+const ROUTING_FIXTURES = [
+  ['callback', 'itemHandler'],
+  ['cycle', 'pingA'],
+  ['kinds', 'core'],
+];
+
+test('⑰エッジが他ノードを貫通せず、全区間が軸平行になる', async ({ page }) => {
+  for (const [fixture, fn] of ROUTING_FIXTURES) {
+    const report = await geometryOf(page, fixture, fn);
+    expect(report.edges, `${fixture}: エッジが無いと検証が空振りする`).toBeGreaterThan(0);
+    expect(report.skipped, `${fixture}: 経路を持たないエッジがあると検証が空振りする`).toEqual([]);
+    expect(report.crossings, `${fixture}: 他ノードを貫通するエッジ`).toEqual([]);
+    expect(report.diagonals, `${fixture}: 斜めの区間`).toEqual([]);
+  }
+});
+
+test('⑱実描画の segment points が viewer の意図した経路と一致する', async ({ page }) => {
+  for (const [fixture, fn] of ROUTING_FIXTURES) {
+    const report = await geometryOf(page, fixture, fn);
+    expect(report.skipped, `${fixture}: 経路を持たないエッジがあると検証が空振りする`).toEqual([]);
+    expect(report.routeMismatches, `${fixture}: 意図経路とのずれ`).toEqual([]);
+  }
+});
+
+test('⑲複数エッジの垂直区間が同じ x に重ならない', async ({ page }) => {
+  // 折れ点をガター中央に揃えると、別々のエッジが1本に見えて呼び出し関係を誤読させる
+  const report = await geometryOf(page, 'callback', 'itemHandler');
+  expect(report.verticalCount, '垂直区間が1本以下だと検証が空振りする').toBeGreaterThan(1);
+  expect(report.overlappingVerticals).toEqual([]);
+});
+
+test('⑳自前 dagre のノード座標が cytoscape-dagre と一致する', async ({ page }) => {
+  await page.goto(generate('callback', 'itemHandler'));
+  await page.waitForFunction(() => window.__cy && window.__cy.nodes().length > 0);
+  await page.click('#expand-all');
+  const maxDelta = await page.evaluate(() => {
+    const cy = window.__cy;
+    const mine = new Map(
+      cy.nodes().map((n) => [n.id(), { x: n.position('x'), y: n.position('y') }]),
+    );
+    try {
+      cytoscape.use(cytoscapeDagre);
+    } catch {
+      // 既に自動登録済みのビルドがある
+    }
+    cy.layout({
+      name: 'dagre',
+      rankDir: 'LR',
+      align: 'DL',
+      nodeSep: 20,
+      nodeDimensionsIncludeLabels: true,
+      padding: 30,
+    }).run();
+    let max = 0;
+    cy.nodes().forEach((n) => {
+      const before = mine.get(n.id());
+      max = Math.max(
+        max,
+        Math.abs(before.x - n.position('x')),
+        Math.abs(before.y - n.position('y')),
+      );
+    });
+    return max;
+  });
+  expect(maxDelta).toBe(0);
+});
+
+test('㉑自己ループ(直接再帰)はエラーなく描画され、他のエッジの経路は壊れない', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(String(e)));
+  const report = await geometryOf(page, 'self-recursion', 'countdown');
+  // countdown -> countdown(自己ループ) と boot -> countdown の 2 本
+  expect(report.edges).toBe(2);
+  // dagre に渡せない自己ループだけが経路を持たず、cytoscape 既定のループ描画に落ちる
+  expect(report.skipped).toHaveLength(1);
+  const loopStyle = await page.evaluate(() =>
+    window.__cy
+      .edges()
+      .filter((e) => e.data('source') === e.data('target'))[0]
+      ?.style('curve-style'),
+  );
+  expect(loopStyle).toBe('bezier');
+  expect(report.crossings).toEqual([]);
+  expect(report.diagonals).toEqual([]);
+  expect(report.routeMismatches).toEqual([]);
+  expect(errors).toEqual([]);
 });

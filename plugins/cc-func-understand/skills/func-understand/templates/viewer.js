@@ -81,16 +81,226 @@ function applyDim() {
     .addClass('dimmed');
 }
 
-function registerDagreLayout() {
-  if (typeof cytoscape === 'undefined') return;
-  if (typeof cytoscapeDagre === 'undefined') return;
-  // ブラウザグローバルビルドによっては cytoscape-dagre が既に自動登録済みのことがあり、
-  // その状態で cytoscape.use() を呼ぶと例外を投げる実装がある。両ケースを許容する。
-  try {
-    cytoscape.use(cytoscapeDagre);
-  } catch {
-    // already registered - ignore
+// dagre へ渡すレイアウトパラメータ。cytoscape-dagre は値が undefined のオプションを
+// setGraph に載せないため、ここで指定しない edgesep(20) / ranksep(50) / ranker は
+// dagre 既定が効く。cytoscape-dagre 経由と同じ座標を得るには、この3つを渡さないことが条件。
+const DAGRE_GRAPH_OPTS = { rankdir: 'LR', align: 'DL', nodesep: 20 };
+const LAYOUT_PADDING = 30;
+
+/**
+ * dagre を直接呼んでレイアウトを計算する。
+ *
+ * cytoscape-dagre はノード座標しか読まず、dagre が計算したエッジ経路(`g.edge().points`)を
+ * 捨てている。経路を使うために dagre を自前で回す。入力は cytoscape-dagre と同一に揃えて
+ * あり、ノード座標は cytoscape-dagre 使用時と一致する(smoke テストで固定)。
+ *
+ * 自己ループ(直接再帰)は dagre がランク付けできないため渡さない。該当エッジは経路を持たず、
+ * cytoscape 既定のループ描画に任せる。
+ */
+function runDagre() {
+  const g = new dagre.graphlib.Graph({ multigraph: true, compound: true });
+  g.setGraph({ ...DAGRE_GRAPH_OPTS });
+  g.setDefaultEdgeLabel(() => ({}));
+  cy.nodes().forEach((n) => {
+    const d = n.layoutDimensions({ nodeDimensionsIncludeLabels: true });
+    g.setNode(n.id(), { width: d.w, height: d.h });
+  });
+  cy.edges().forEach((e) => {
+    const source = e.data('source');
+    const target = e.data('target');
+    if (source === target) return;
+    g.setEdge(source, target, { minlen: 1, weight: 1 }, e.id());
+  });
+  dagre.layout(g);
+  return g;
+}
+
+/** dagre の結果をノード位置に反映し、ビューポートを合わせる。 */
+function applyDagreLayout(g) {
+  cy.batch(() => {
+    cy.nodes().forEach((n) => {
+      const d = g.node(n.id());
+      if (d) n.position({ x: d.x, y: d.y });
+    });
+  });
+  cy.fit(undefined, LAYOUT_PADDING);
+}
+
+/**
+ * ランク列と列の間にある「ノードが存在しない縦帯」(ガター)を x 昇順で返す。
+ *
+ * dagre は同一ランクのノードを同じ rank 座標(rankdir=LR なら x)に中心揃えし、隣接ランクの
+ * 間隔を (maxWidth_r + maxWidth_r+1)/2 + ranksep で取る。よって
+ * [rank r のノード右端の最大値, rank r+1 のノード左端の最小値] には必ず ranksep 幅の空きがある。
+ * dagre 自身もこの帯を edge label 用 dummy の置き場として使うので、経路点の一部はここに乗る。
+ */
+function computeGutters(g) {
+  const ranks = new Map(); // rank 座標(x) -> ノード群の左端/右端
+  for (const id of g.nodes()) {
+    const d = g.node(id);
+    if (!d) continue;
+    const rank = ranks.get(d.x) ?? { left: Infinity, right: -Infinity };
+    rank.left = Math.min(rank.left, d.x - d.width / 2);
+    rank.right = Math.max(rank.right, d.x + d.width / 2);
+    ranks.set(d.x, rank);
   }
+  const xs = [...ranks.keys()].sort((a, b) => a - b);
+  const gutters = [];
+  for (let i = 0; i + 1 < xs.length; i++) {
+    gutters.push({ x1: ranks.get(xs[i]).right, x2: ranks.get(xs[i + 1]).left, turns: [] });
+  }
+  return gutters;
+}
+
+/** x を含むガターを返す(境界上も含む)。無ければ null。 */
+function gutterAt(gutters, x) {
+  return gutters.find((gutter) => x >= gutter.x1 && x <= gutter.x2) ?? null;
+}
+
+/**
+ * ガター内で折れ点の x を散らす。
+ *
+ * 全てをガター中央に置くと、同じランクから出る垂直セグメントが同一 x に重なり、
+ * 別々のエッジが 1 本に見えて呼び出し関係を誤読させる。行き先 y でソートしてから
+ * 等間隔に割り当てると、垂直セグメント同士の交差も減る。
+ */
+function assignTurnXs(gutter) {
+  if (gutter.turns.length === 0) return;
+  gutter.turns.sort((a, b) => a.sortKey - b.sortKey || a.seq - b.seq);
+  const step = (gutter.x2 - gutter.x1) / (gutter.turns.length + 1);
+  gutter.turns.forEach((turn, i) => {
+    turn.x = gutter.x1 + step * (i + 1);
+  });
+}
+
+/**
+ * 各エッジの経路を「レーン内の水平移動」と「ガター内の垂直移動」だけの直交ポリラインで求め、
+ * edgeId -> 絶対座標の点列(始点=source 中心, 終点=target 中心) を返す。
+ *
+ * dagre はランクを跨ぐエッジに dummy node を挿入してレーン(ノードに当たらない水平帯)を
+ * 確保するが、レーンへの出入りは斜め直線で、そこが何を横切るかは保証していない
+ * (実測: 210 本中 84 本が他ノードを貫通し、その全てが両端の斜め区間由来)。
+ * 斜めをガター内での直角折れに置き換えると、水平区間はレーン内・垂直区間はガター内に収まる。
+ *
+ * 自己ループは dagre に渡していないので経路を持たず、cytoscape 既定のループ描画に任せる。
+ */
+function computeRoutes(g) {
+  const gutters = computeGutters(g);
+  const routes = new Map();
+  let seq = 0;
+
+  cy.edges().forEach((e) => {
+    const source = e.data('source');
+    const target = e.data('target');
+    if (source === target) return;
+    const dagreEdge = g.edge({ v: source, w: target, name: e.id() });
+    const src = g.node(source);
+    const tgt = g.node(target);
+    if (!dagreEdge || !src || !tgt) return;
+
+    // dagre の points の両端はノード境界との交点。cytoscape 側が境界でクリップするため捨て、
+    // 中間ランクに確保されたレーン上の点だけを使う。
+    const lane = (dagreEdge.points ?? []).slice(1, -1).map((p) => ({ x: p.x, y: p.y }));
+    const raw = [{ x: src.x, y: src.y }, ...lane, { x: tgt.x, y: tgt.y }];
+
+    const points = [raw[0]];
+    for (let i = 1; i < raw.length; i++) {
+      const from = points[points.length - 1];
+      const to = raw[i];
+      if (from.x !== to.x && from.y !== to.y) {
+        // dagre は edge label 用の dummy をランク列の間(=ガター)に置くため、斜めになる区間の
+        // 少なくとも一方の端は必ずガターの中にある。そこで折れば垂直区間がガターに収まる。
+        const gutter = gutterAt(gutters, to.x) ?? gutterAt(gutters, from.x);
+        // x はガターごとの分散(assignTurnXs)で確定するため、2点で turn を共有する
+        const turn = {
+          x: gutter ? (gutter.x1 + gutter.x2) / 2 : (from.x + to.x) / 2,
+          sortKey: to.y,
+          seq: seq++,
+        };
+        if (gutter) gutter.turns.push(turn);
+        points.push({ x: 0, y: from.y, turn });
+        points.push({ x: 0, y: to.y, turn });
+      }
+      points.push(to);
+    }
+    routes.set(e.id(), points);
+  });
+
+  gutters.forEach(assignTurnXs);
+  for (const points of routes.values()) {
+    for (const p of points) {
+      if (p.turn) p.x = p.turn.x;
+    }
+  }
+  return routes;
+}
+
+/**
+ * 絶対座標の経路を cytoscape の segment-weights / segment-distances に変換する。
+ *
+ * 基準線は A→B。weight は A→B 方向の比率、distance は左手系の符号付き垂直距離
+ * (A→B が +x のとき distance>0 は +y 側。実測で確認)。
+ */
+function toSegments(points, a, b) {
+  const inner = points.slice(1, -1);
+  if (inner.length === 0) return null;
+  const vx = b.x - a.x;
+  const vy = b.y - a.y;
+  const len2 = vx * vx + vy * vy;
+  if (len2 === 0) return null;
+  const len = Math.sqrt(len2);
+  const weights = [];
+  const distances = [];
+  for (const p of inner) {
+    const dx = p.x - a.x;
+    const dy = p.y - a.y;
+    weights.push((dx * vx + dy * vy) / len2);
+    distances.push((vx * dy - vy * dx) / len);
+  }
+  return { weights, distances };
+}
+
+/**
+ * 経路を cytoscape に適用する。
+ *
+ * segments の基準点 A/B は「source と target の中心を結ぶ直線が各ノード形状と交わる点」で、
+ * 角丸矩形の丸みまで効くため自前計算は再現が難しい。weights=[0,1] / distances=[0,0] は
+ * 定義上 A と B そのものになるので、一度それを設定して segmentPoints() から読み取る。
+ */
+function applyRoutes(routes) {
+  cy.batch(() => {
+    cy.edges().forEach((e) => {
+      if (!routes.has(e.id())) return;
+      e.style({ 'curve-style': 'segments', 'segment-weights': [0, 1], 'segment-distances': [0, 0] });
+    });
+  });
+
+  const baselines = new Map();
+  cy.edges().forEach((e) => {
+    if (!routes.has(e.id())) return;
+    const ends = e.segmentPoints();
+    if (ends && ends.length === 2) baselines.set(e.id(), ends);
+  });
+
+  cy.batch(() => {
+    cy.edges().forEach((e) => {
+      const points = routes.get(e.id());
+      if (!points) return;
+      const ends = baselines.get(e.id());
+      const seg = ends ? toSegments(points, ends[0], ends[1]) : null;
+      if (seg) {
+        e.style({
+          'curve-style': 'segments',
+          'segment-weights': seg.weights,
+          'segment-distances': seg.distances,
+        });
+      } else {
+        // 折れ点なし(水平一直線)や基準線が退化したケース
+        e.style({ 'curve-style': 'straight' });
+      }
+      e.scratch('_route', points);
+    });
+  });
 }
 
 // 展開可能性の提示は詳細パネルの「上流/下流を展開 (+N)」ボタンが担う。
@@ -182,7 +392,8 @@ const CY_STYLE = [
       'line-color': '#484f58',
       'target-arrow-color': '#484f58',
       'target-arrow-shape': 'triangle',
-      'curve-style': 'taxi',
+      // curve-style はエッジごとに applyRoutes() が segments / straight を設定する。
+      // ここに残るのは経路を持たないエッジ(自己ループ)だけで、cytoscape 既定の bezier で描く。
       'font-size': 9,
       color: '#8b949e',
     },
@@ -220,7 +431,6 @@ const CY_STYLE = [
 ];
 
 function initCy() {
-  registerDagreLayout();
   cy = cytoscape({
     container: document.getElementById('graph'),
     elements: [],
@@ -255,7 +465,9 @@ function render() {
   const elements = buildElements();
   cy.elements().remove();
   cy.add(elements);
-  cy.layout({ name: 'dagre', rankDir: 'LR', align: 'DL', nodeSep: 20, nodeDimensionsIncludeLabels: true, padding: 30 }).run();
+  const g = runDagre();
+  applyDagreLayout(g);
+  applyRoutes(computeRoutes(g));
   applyDim();
 }
 
