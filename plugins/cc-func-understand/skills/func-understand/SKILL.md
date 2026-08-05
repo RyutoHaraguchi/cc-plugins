@@ -83,7 +83,7 @@ stdout の JSON と exit code で分岐する:
 min(upstreamDistance ?? Infinity, downstreamDistance ?? Infinity) <= 2  かつ  internal === true
 ```
 
-- 各対象ノードに、そのコードを読んで 1〜3 行の日本語要約を作成し、ノードの `summary` フィールドに埋める。
+- 各対象ノードに、そのコードを読んで 1〜3 行の日本語要約を作成し、ノードの `summary` フィールドに埋める。ノードの `code` は宣言の全文が入っている(切り詰めない)ため、要約は `code` だけで完結してよい。
 - 対象ノードが **30 を超える**場合は、Task tool のサブエージェントに分割して要約させる(1 エージェントあたり最大 30 ノード)。各サブエージェントには対象ノードの `id` / `name` / `code` のみを渡し、`{ "id": "summary text", ... }` 形式の JSON を返させる。返ってきた要約をノードにマージする。
 - **対象範囲外のノードには一切触れない**: 距離 2 超の内部ノードは `summary` を `null` のまま変更しない。external/boundary ノード(`internal: false`)にはそもそも `summary` キー自体が存在しない(graph-builder が付与しない)ため、追加してはならない。
 - 要約を埋め終えたら graph.json を同じパスに上書き保存する。
@@ -114,3 +114,4 @@ node <skill>/scripts/generate-html.mjs \
   - 無名関数(匿名関数式)は解析対象として指定できない。
   - TypeScript 7 系のプロジェクトでは、同梱されている TypeScript 5 系にフォールバックして解析する。
   - テスト関連ファイル(`.func-understand.json` の `testExclude` にマッチするファイル)はデフォルトでノード化されない。テスト込みで見たい場合は `--include-tests` を付ける。起点がテストファイル内の場合は自動で除外が無効化される。
+  - ノードの `code` は全文を保持するため、1000 行級の関数を含むグラフでは HTML が数百 KB〜数 MB 大きくなる。HTML の詳細パネルは 200 行を超えるノードを既定で先頭 200 行のみ表示し、「全文を表示」ボタンで残りを展開する(残り行数はボタンに表示される)。

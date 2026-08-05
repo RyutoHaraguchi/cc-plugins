@@ -213,6 +213,28 @@ body.resizing {
   flex-wrap: wrap;
 }
 
+/* 長大なノードでコード欄が先頭のみ描画されているときの案内と展開ボタン。
+   行数が閾値以下のノードでは JS 側で hidden にされる。 */
+#detail .code-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+
+/* display 指定は UA スタイルの [hidden] { display: none } より詳細度が高く、
+   hidden 属性だけでは消えないため明示的に打ち消す。 */
+#detail .code-bar[hidden] {
+  display: none;
+}
+
+#detail .code-note {
+  color: #6e7681;
+  font-size: 11px;
+}
+
 #detail pre {
   margin: 0;
   border-radius: 6px;

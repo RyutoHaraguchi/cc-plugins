@@ -325,12 +325,25 @@ function buildDetailSkeleton() {
   btnRow.appendChild(downBtn);
   detail.appendChild(btnRow);
 
+  // 長大なコードは既定で先頭 CODE_PREVIEW_LINES 行だけ描画し、この行から全文へ展開する。
+  const codeBar = document.createElement('div');
+  codeBar.className = 'code-bar';
+  codeBar.hidden = true;
+  const codeNote = document.createElement('span');
+  codeNote.className = 'code-note';
+  const showAllBtn = document.createElement('button');
+  showAllBtn.type = 'button';
+  showAllBtn.className = 'show-all-code';
+  codeBar.appendChild(codeNote);
+  codeBar.appendChild(showAllBtn);
+  detail.appendChild(codeBar);
+
   const pre = document.createElement('pre');
   const code = document.createElement('code');
   pre.appendChild(code);
   detail.appendChild(pre);
 
-  return { detail, name, kindLine, summary, loc, upBtn, downBtn, pre };
+  return { detail, name, kindLine, summary, loc, upBtn, downBtn, codeBar, codeNote, showAllBtn, pre };
 }
 
 function languageClassFor(file) {
@@ -338,6 +351,46 @@ function languageClassFor(file) {
   if (/\.tsx?$/.test(file)) return 'language-typescript';
   if (/\.jsx?$/.test(file)) return 'language-javascript';
   return null;
+}
+
+// 1000 行級のノードを毎回フルにハイライトすると詳細パネルの切り替えが目に見えて重くなるため、
+// 既定では先頭のみ描画する。全文は n.code に載っているので「全文を表示」で展開できる。
+const CODE_PREVIEW_LINES = 200;
+
+/**
+ * 詳細パネルのコード欄を描画する。
+ * showAll=false かつ CODE_PREVIEW_LINES 超のときのみ先頭を切り出し、
+ * 残り行数と展開ボタンを code-bar に出す(切り出しは表示だけで、データは常に全文)。
+ */
+function renderCode(n, showAll) {
+  const { codeBar, codeNote, showAllBtn, pre } = detailEls;
+  const full = n.code ?? '';
+  const lines = full === '' ? [] : full.split('\n');
+  const isPreview = !showAll && lines.length > CODE_PREVIEW_LINES;
+  const shown = isPreview ? lines.slice(0, CODE_PREVIEW_LINES).join('\n') : full;
+
+  codeBar.hidden = lines.length <= CODE_PREVIEW_LINES;
+  if (!codeBar.hidden) {
+    codeNote.textContent = isPreview
+      ? `先頭 ${CODE_PREVIEW_LINES} 行を表示中 (全 ${lines.length} 行)`
+      : `全 ${lines.length} 行を表示中`;
+    showAllBtn.hidden = !isPreview;
+    showAllBtn.textContent = `全文を表示 (残り ${lines.length - CODE_PREVIEW_LINES} 行)`;
+    showAllBtn.onclick = () => renderCode(n, true);
+  }
+
+  // hljs は同一 <code> 要素への再ハイライトを嫌う実装があるため、毎回新しい要素に差し替える。
+  pre.textContent = '';
+  const codeEl = document.createElement('code');
+  const langClass = languageClassFor(n.file);
+  if (langClass) codeEl.className = langClass;
+  codeEl.textContent = full === '' ? '(コードなし: 外部/未解決の呼び出し)' : shown;
+  pre.appendChild(codeEl);
+  if (full !== '' && typeof hljs !== 'undefined') {
+    hljs.highlightElement(codeEl);
+  }
+  // 展開時はコード欄の先頭から読み始められるようにする(前回のスクロール位置を持ち越さない)。
+  pre.scrollTop = 0;
 }
 
 function showDetail(id) {
@@ -349,16 +402,7 @@ function showDetail(id) {
   detailEls.summary.textContent = n.summary ?? '(要約未生成)';
   detailEls.loc.textContent = n.file ? `${n.file}:${n.startLine ?? '?'}` : n.name;
 
-  // hljs は同一 <code> 要素への再ハイライトを嫌う実装があるため、毎回新しい要素に差し替える。
-  detailEls.pre.textContent = '';
-  const codeEl = document.createElement('code');
-  const langClass = languageClassFor(n.file);
-  if (langClass) codeEl.className = langClass;
-  codeEl.textContent = n.code ?? '(コードなし: 外部/未解決の呼び出し)';
-  detailEls.pre.appendChild(codeEl);
-  if (n.code && typeof hljs !== 'undefined') {
-    hljs.highlightElement(codeEl);
-  }
+  renderCode(n, false);
 
   const upCount = expandable(id, 'up').length;
   const downCount = expandable(id, 'down').length;

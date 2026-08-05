@@ -2,21 +2,20 @@ import path from 'node:path';
 import { collectDeclarations } from './target-resolver.mjs';
 import { classifySymbolFile } from './symbol-classifier.mjs';
 
-const MAX_CODE_BYTES = 16 * 1024;
 const MODULE_EXCERPT_LINES = 10;
 
+/**
+ * ノードのコードは全文を保持する(切り詰めない)。
+ *
+ * 以前は 16KB でバイト単位に切っていたが、1000 行級の関数が識別子の途中で
+ * 途切れ、しかも viewer 側に切り詰めの表示が無いため読み手が欠落に気付けなかった。
+ * 巨大ノードの描画コストは viewer 側の遅延展開(先頭 N 行のみ描画)で受け持つ。
+ *
+ * codeTruncated は常に false だが、graph.json の既存フィールドとして残す
+ * (下流の消費側がキーの存在を前提にしているため)。
+ */
 export function truncateCode(text) {
-  const bytes = Buffer.byteLength(text, 'utf8');
-  if (bytes <= MAX_CODE_BYTES) return { code: text, codeTruncated: false };
-  // バイト単位で安全に切る(マルチバイト文字の途中で切れないよう Buffer 経由で丸める)
-  let buf = Buffer.from(text, 'utf8').subarray(0, MAX_CODE_BYTES);
-  let sliced = buf.toString('utf8');
-  // 末尾が不完全なマルチバイト文字になった場合、置換文字が出る可能性があるので
-  // decode 後に再エンコードしてサイズが超過しないことだけ保証する
-  while (Buffer.byteLength(sliced, 'utf8') > MAX_CODE_BYTES) {
-    sliced = sliced.slice(0, -1);
-  }
-  return { code: sliced, codeTruncated: true };
+  return { code: text, codeTruncated: false };
 }
 
 function lineOf(sourceFile, pos) {
