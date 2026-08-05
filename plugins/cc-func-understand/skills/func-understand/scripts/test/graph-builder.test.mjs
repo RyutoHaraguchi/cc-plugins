@@ -61,11 +61,24 @@ test('truncation: maxNodes 到達で打ち切り情報を記録する', () => {
   assert.ok(Array.isArray(g.truncation.frontier));
 });
 
-test('code はノードあたり 16KB で切り詰められる', () => {
-  const g = graphFor('basic', 'getUser');
+test('code は切り詰められず全文が載る(旧 16KB 上限の回帰)', () => {
+  // large-code fixture の hugeFunction は 16KB を大きく超え、末尾に SENTINEL_TAIL を持つ。
+  // 上限で切られていれば末尾行と閉じ括弧が欠けるため、この2つで全文保持を検証する。
+  const g = graphFor('large-code', 'hugeFunction');
+  const huge = byName(g, 'hugeFunction');
+  assert.ok(huge, 'hugeFunction が起点ノードとして解決される');
+  assert.ok(
+    Buffer.byteLength(huge.code, 'utf8') > 16 * 1024,
+    `切り詰めが起きている(${Buffer.byteLength(huge.code, 'utf8')} bytes)`,
+  );
+  assert.match(huge.code, /SENTINEL_TAIL/);
+  assert.match(huge.code, /return seed \+ step0 \+ step599;/);
+  assert.equal(huge.codeTruncated, false);
+
   for (const n of g.nodes.filter((n) => n.internal)) {
-    assert.ok(Buffer.byteLength(n.code, 'utf8') <= 16 * 1024);
     assert.equal(typeof n.codeTruncated, 'boolean');
+    // 全ノードの code は「宣言の実サイズ」と一致する(=どこかで丸められていない)
+    assert.equal(n.code.split('\n').length, n.endLine - n.startLine + 1);
   }
 });
 

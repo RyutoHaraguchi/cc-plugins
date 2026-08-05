@@ -248,3 +248,41 @@ test('⑭参照グラフモード: variable ノードと reads エッジが描�
   expect(readsEdges).toBeGreaterThan(0);
   await expect(page.locator('#banner .mode-line')).toContainText('参照グラフモード');
 });
+
+test('⑮長大なノードは先頭のみ描画され、「全文を表示」で全行に展開される', async ({ page }) => {
+  // large-code fixture の hugeFunction は 600 行超。旧実装では 16KB で切られ、
+  // viewer 側にも切り詰めの表示が無いため読み手が欠落に気付けなかった。
+  await page.goto(generate('large-code', 'hugeFunction'));
+  await page.evaluate(() => window.__showDetail(window.__graphTargetId));
+
+  const lineCount = () =>
+    page.locator('#detail pre code').evaluate((el) => el.textContent.split('\n').length);
+
+  // 既定はプレビュー: 先頭 200 行のみ描画され、末尾の番兵は出ていない
+  expect(await lineCount()).toBe(200);
+  await expect(page.locator('#detail .code-note')).toContainText('先頭 200 行を表示中');
+  await expect(page.locator('#detail pre code')).not.toContainText('SENTINEL_TAIL');
+
+  // 展開すると全文が出る(= graph.json 側に全文が載っている証拠でもある)
+  await page.click('#detail .show-all-code');
+  await expect(page.locator('#detail pre code')).toContainText('SENTINEL_TAIL');
+  expect(await lineCount()).toBeGreaterThan(600);
+  await expect(page.locator('#detail .code-note')).toContainText('全 ');
+  await expect(page.locator('#detail .show-all-code')).toBeHidden();
+
+  // 別ノードへ切り替えたあと戻ると、既定のプレビュー状態に戻る
+  const otherId = await page.evaluate(
+    () => window.__cy.nodes().filter((n) => n.data('id') !== window.__graphTargetId)[0]?.data('id'),
+  );
+  expect(otherId).toBeTruthy();
+  await page.evaluate((id) => window.__showDetail(id), otherId);
+  await page.evaluate(() => window.__showDetail(window.__graphTargetId));
+  expect(await lineCount()).toBe(200);
+});
+
+test('⑯短いノードでは code-bar が出ない', async ({ page }) => {
+  await page.goto(generate('callback', 'itemHandler'));
+  await page.evaluate(() => window.__showDetail(window.__graphTargetId));
+  await expect(page.locator('#detail pre code')).not.toBeEmpty();
+  await expect(page.locator('#detail .code-bar')).toBeHidden();
+});
