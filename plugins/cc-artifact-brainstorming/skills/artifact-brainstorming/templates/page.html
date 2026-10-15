@@ -1,0 +1,551 @@
+<title>図解ひな形</title>
+<style>
+/* layout: 1 列の読み物。図は方眼のキャンバスで横スクロール可。問いは目印とポップオーバーだけ */
+:root {
+  --bg: #f5f6f8; --paper: #ffffff; --grid: #e3e7ed; --fg: #1c232e; --muted: #5d6879;
+  --line: #3a485b; --accent: #c2410c; --accent-soft: #fff0e6; --done: #23794a; --done-soft: #e6f5ec;
+  --warn: #a16207; --warn-soft: #fdf4dc; --off: #8792a3;
+  --font-body: "IBM Plex Sans JP", "Hiragino Sans", "Yu Gothic", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11151b; --paper: #192029; --grid: #232c37; --fg: #e5e9ef; --muted: #9aa5b5;
+    --line: #a9b5c5; --accent: #fb8a4c; --accent-soft: #3a2316; --done: #6ccf95; --done-soft: #19321f;
+    --warn: #f1c453; --warn-soft: #342a10; --off: #6b7789; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11151b; --paper: #192029; --grid: #232c37; --fg: #e5e9ef; --muted: #9aa5b5;
+  --line: #a9b5c5; --accent: #fb8a4c; --accent-soft: #3a2316; --done: #6ccf95; --done-soft: #19321f;
+  --warn: #f1c453; --warn-soft: #342a10; --off: #6b7789; color-scheme: dark;
+}
+body { background: var(--bg); color: var(--fg); font-family: var(--font-body); line-height: 1.7; }
+main, .top { max-width: 860px; margin: 0 auto; padding-inline: max(16px, env(safe-area-inset-left, 0px)) max(16px, env(safe-area-inset-right, 0px)); }
+.top { padding-block: 24px 4px; }
+main { padding-block: 8px 80px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 28px; }
+h1 { font-size: 1.45rem; margin: 0; text-wrap: balance; }
+h2 { font-size: 1.12rem; margin: 0 0 8px; text-wrap: balance; }
+p { margin: 8px 0; max-width: 68ch; }
+a { color: var(--accent); }
+.progress { font-size: .88rem; color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; }
+.progress .warn { color: var(--warn); }
+figure.flow { margin: 12px 0; }
+figure.flow figcaption { font-size: .85rem; color: var(--muted); margin-top: 6px; }
+.canvas { background: var(--paper); border: 1px solid var(--grid); border-radius: 6px; overflow-x: auto; }
+.canvas svg { display: block; }
+.canvas text { font-family: var(--font-body); fill: var(--fg); }
+.tbl { overflow-x: auto; }
+table { border-collapse: collapse; font-size: .9rem; }
+th, td { min-width: 4em; border: 1px solid var(--grid); padding: 6px 10px; text-align: left; vertical-align: top; background: var(--paper); }
+.mk { display: inline-flex; align-items: center; gap: 3px; margin-left: 4px; padding: 0 6px; height: 1.45em; vertical-align: .1em;
+  font: 600 .72rem/1 var(--font-mono); border-radius: 999px; border: 1.5px solid currentColor; background: var(--paper); cursor: pointer; }
+.mk:focus-visible, .mk-svg:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.m-open { color: var(--accent); background: var(--accent-soft); }
+.m-sent { color: var(--muted); border-style: dashed; }
+.m-done { color: var(--done); background: var(--done-soft); }
+.m-revoked { color: var(--off); text-decoration: line-through; }
+.m-recheck { color: var(--warn); background: var(--warn-soft); }
+.mk-svg { cursor: pointer; }
+#pop { position: absolute; z-index: 10; background: var(--paper); color: var(--fg); border: 1.5px solid var(--line);
+  border-radius: 8px; box-shadow: 0 8px 28px rgb(0 0 0 / .18); padding: 14px 16px; max-height: 70vh; overflow: auto; box-sizing: border-box; max-width: calc(100vw - 32px); }
+#pop table { min-width: 640px; }
+#pop td:first-child, #pop th:first-child { white-space: nowrap; }
+#pop.sheet { position: fixed; left: 0; right: 0; bottom: 0; top: auto; width: auto !important; max-width: none; max-height: 80vh;
+  border-radius: 12px 12px 0 0; padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px)); }
+.pop-head { display: flex; align-items: baseline; gap: 8px; }
+.pop-head .t { font-weight: 700; flex: 1; min-width: 0; }
+.pop-head .x { border: 0; background: none; color: var(--muted); font-size: 1.2rem; cursor: pointer; }
+.opt { display: grid; grid-template-columns: auto 1fr; gap: 2px 8px; padding: 8px; border: 1px solid var(--grid); border-radius: 6px; margin: 6px 0; cursor: pointer; }
+.opt .eff { grid-column: 2; color: var(--muted); font-size: .88rem; }
+.rec { margin-left: 6px; font-size: .72rem; color: var(--accent); border: 1px solid currentColor; border-radius: 4px; padding: 0 4px; }
+.pop textarea, #pop textarea { width: 100%; min-height: 4.5em; box-sizing: border-box; font: inherit; }
+.btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.btn { font: inherit; padding: 6px 12px; border-radius: 6px; border: 1.5px solid var(--accent); background: var(--accent); color: var(--paper); cursor: pointer; }
+.btn.ghost { background: transparent; color: var(--accent); }
+.btn:disabled { opacity: .5; cursor: default; }
+.msg { font-size: .88rem; margin-top: 6px; }
+.msg.err { color: var(--accent); }
+.note { font-size: .88rem; color: var(--muted); }
+.answer { padding: 8px 10px; border-radius: 6px; background: var(--done-soft); }
+.revoked { padding: 8px 10px; border-radius: 6px; background: var(--grid); }
+.recheck { padding: 8px 10px; border-radius: 6px; background: var(--warn-soft); }
+</style>
+
+<header class="top">
+  <h1>通知設定の保存（サンプル）</h1>
+  <p class="progress" id="progress"></p>
+</header>
+<main>
+  <section id="ch1">
+    <h2>1. 何を決めたいか</h2>
+    <p>利用者が通知設定を変えたときに、<span data-q="Q0">いつ保存するか</span>を決めます。いまは画面を離れると変更が消えます。保存の流れは<a href="#fig-save">保存の流れの図</a>のとおりです。</p>
+  </section>
+  <section id="ch2">
+    <h2>2. 保存の流れ</h2>
+    <figure class="flow" id="fig-save" data-diagram="save">
+      <figcaption>設定を変えてから保存されるまで</figcaption>
+    </figure>
+    <p>失敗したときの見せ方は、<span data-q="Q2">エラーの出し方</span>の問いで扱います。</p>
+  </section>
+</main>
+<div id="pop" role="dialog" aria-modal="false" hidden></div>
+<script id="core">
+/* 純粋関数。DOM に触らない。tests/core.test.mjs が vm で読み込んで確かめる。 */
+var GRID = { cw: 240, rh: 110, ox: 32, oy: 28, bw: 196, bh: 56 };
+
+function layoutNode(n, g) {
+  g = g || GRID;
+  var x = g.ox + n.col * g.cw, y = g.oy + n.row * g.rh;
+  return { x: x, y: y, w: g.bw, h: g.bh, cx: x + g.bw / 2, cy: y + g.bh / 2 };
+}
+
+function edgePath(from, to, g) {
+  g = g || GRID;
+  var a = layoutNode(from, g), b = layoutNode(to, g);
+  if (from.row === to.row) {
+    var dir = to.col > from.col ? 1 : -1;
+    var x1 = a.cx + dir * a.w / 2;
+    var x2 = b.cx - dir * (b.w / 2 + (to.kind === "decision" ? 12 : 2));
+    return "M" + x1 + "," + a.cy + " H" + x2;
+  }
+  var down = to.row > from.row ? 1 : -1;
+  var y1 = a.cy + down * (a.h / 2 + (from.kind === "decision" ? 10 : 0));
+  var y2 = b.cy - down * (b.h / 2 + (to.kind === "decision" ? 12 : 2));
+  if (a.cx === b.cx) return "M" + a.cx + "," + y1 + " V" + y2;
+  var my = (y1 + y2) / 2;
+  return "M" + a.cx + "," + y1 + " V" + my + " H" + b.cx + " V" + y2;
+}
+
+function wrapLabel(text, max, maxLines) {
+  maxLines = maxLines || 3;
+  var chars = Array.from(String(text == null ? "" : text));
+  var lines = [];
+  for (var i = 0; i < chars.length; i += max) lines.push(chars.slice(i, i + max).join(""));
+  if (lines.length > maxLines) {
+    lines.length = maxLines;
+    lines[maxLines - 1] = Array.from(lines[maxLines - 1]).slice(0, max - 1).join("") + "…";
+  }
+  return lines;
+}
+
+function idsOf(value) {
+  if (!value) return [];
+  if (Array.isArray(value)) return value.slice();
+  return String(value).split(/\s+/).filter(Boolean);
+}
+
+var STATUS = {
+  open: { mark: "?", cls: "m-open", text: "回答待ち" },
+  done: { mark: "✓", cls: "m-done", text: "決定" },
+  revoked: { mark: "×", cls: "m-revoked", text: "取り消し" },
+  recheck: { mark: "!", cls: "m-recheck", text: "要確認" }
+};
+
+function markerInfo(q, sentIds) {
+  sentIds = sentIds || [];
+  var s = STATUS[q.status] || STATUS.open;
+  var isOpen = !STATUS[q.status] || q.status === "open";
+  if (isOpen && sentIds.indexOf(q.id) >= 0) return { label: q.id, mark: "…", cls: "m-sent", text: "送信済み" };
+  return { label: q.id, mark: s.mark, cls: s.cls, text: s.text };
+}
+
+function progress(questions) {
+  var c = { done: 0, open: 0, recheck: 0, revoked: 0 };
+  questions.forEach(function (q) { c[c.hasOwnProperty(q.status) ? q.status : "open"]++; });
+  return c;
+}
+
+function progressText(c) {
+  var parts = ["決定 " + c.done, "回答待ち " + c.open];
+  if (c.recheck) parts.push("要確認 " + c.recheck);
+  return parts.join(" ／ ");
+}
+
+function answerBody(q, key, note) {
+  var o = q.options.filter(function (x) { return x.key === key; })[0];
+  if (!o) throw new Error("unknown option " + key);
+  var n = String(note || "").trim();
+  return "選択：" + o.key + "「" + o.label + "」" + (n ? "\n補足：" + n : "");
+}
+
+var MAX_BYTES = 4000; /* sendToClaude は UTF-8 で 4 KiB まで。余裕を残す */
+function buildMessage(tag, q, kind, body) {
+  var text = "[" + tag + "] " + q.id + "「" + q.title + "」" + kind + "\n" + body;
+  var enc = new TextEncoder();
+  if (enc.encode(text).length <= MAX_BYTES) return text;
+  var chars = Array.from(text), lo = 0, hi = chars.length;
+  while (lo < hi) {
+    var mid = Math.ceil((lo + hi) / 2);
+    if (enc.encode(chars.slice(0, mid).join("") + "…").length <= MAX_BYTES) lo = mid; else hi = mid - 1;
+  }
+  return chars.slice(0, lo).join("") + "…";
+}
+
+function diagramQuestionIds(diagrams) {
+  var ids = [];
+  Object.keys(diagrams || {}).forEach(function (k) {
+    (diagrams[k].nodes || []).forEach(function (n) { ids = ids.concat(idsOf(n.q)); });
+  });
+  return ids;
+}
+
+function orphanQuestions(questions, textIds, diagrams) {
+  var have = {};
+  (textIds || []).concat(diagramQuestionIds(diagrams)).forEach(function (id) { have[id] = true; });
+  return questions.filter(function (q) { return !have[q.id]; }).map(function (q) { return q.id; });
+}
+</script>
+<script id="data">
+/* Claude が書き換える部分。図・問いはここだけを直す。 */
+var PAGE = { tag: "壁打ち" };
+var DIAGRAMS = {
+  save: {
+    nodes: [
+      { id: "edit", kind: "start", col: 0, row: 0, label: "利用者が設定を変える" },
+      { id: "when", kind: "decision", col: 0, row: 1, label: "いつ保存する？", q: "Q1 Q1R" },
+      { id: "store", kind: "process", col: 0, row: 2, label: "サーバーに保存する" },
+      { id: "err", kind: "process", col: 1, row: 2, label: "失敗を知らせる" }
+    ],
+    edges: [
+      { from: "edit", to: "when" },
+      { from: "when", to: "store", label: "決まったら" },
+      { from: "store", to: "err", label: "失敗", dashed: true }
+    ]
+  }
+};
+var QUESTIONS = [
+  { id: "Q0", status: "done", title: "保存のきっかけを決める必要があるか", situation: "<p>いまは画面を離れると変更が消える。</p>",
+    options: [{ key: "a", label: "決める", effect: "保存の流れを設計する" }, { key: "b", label: "今のままでよい", effect: "何もしない" }],
+    recommended: "a", recommendWhy: "変更が消える問い合わせが来ているため",
+    answer: "<strong>決定：a「決める」</strong>。保存のきっかけを Q1 で決める。" },
+  { id: "Q1", status: "revoked", title: "保存ボタンで保存するか", situation: "<p>保存ボタンを置くか、自動で保存するか。</p>",
+    options: [{ key: "a", label: "保存ボタン", effect: "押し忘れると消える" }, { key: "b", label: "自動保存", effect: "変えるたびに保存" }],
+    recommended: "a", recommendWhy: "",
+    answer: "<strong>決定：a「保存ボタン」</strong>", revokedBy: "Q1R", revokedWhy: "押し忘れで消える問い合わせが続くと分かったため" },
+  { id: "Q1R", status: "open", title: "自動保存の間隔をどうするか",
+    situation: "<p>Q1 を取り消し、自動保存にすると決め直した。残るのは間隔。</p>",
+    example: "<div class=\"tbl\"><table><thead><tr><th>間隔</th><th>利用者から見えること</th></tr></thead><tbody><tr><td>変えるたび</td><td>すぐ保存される。通信が増える</td></tr><tr><td>1 秒待って</td><td>続けて変えたときはまとめて保存</td></tr></tbody></table></div>",
+    options: [{ key: "a", label: "1 秒待ってまとめる", effect: "通信が減る。直後に閉じると最後の 1 秒が消える" }, { key: "b", label: "変えるたび", effect: "消えないが通信が増える" }],
+    recommended: "a", recommendWhy: "通知設定は続けて切り替えることが多いため" },
+  { id: "Q2", status: "recheck", title: "保存に失敗したときの出し方", situation: "<p>失敗したことを画面にどう出すか。</p>",
+    recheckWhy: "Q1 が取り消されたので、ボタン前提の案を見直す必要がある",
+    options: [{ key: "a", label: "画面上部に帯", effect: "目立つ" }, { key: "b", label: "項目の横に小さく", effect: "どれが失敗したか分かる" }],
+    recommended: "b", recommendWhy: "自動保存では項目ごとに失敗しうるため" }
+];
+</script>
+<script id="ui">
+(function () {
+  var NS = "http://www.w3.org/2000/svg";
+  function svgEl(t, a) { var e = document.createElementNS(NS, t); for (var k in (a || {})) e.setAttribute(k, a[k]); return e; }
+
+  function drawDiagram(fig) {
+    var name = fig.getAttribute("data-diagram"), d = DIAGRAMS[name];
+    var old = fig.querySelector(".canvas"); if (old) old.remove();
+    if (!d) { console.warn("図のデータが無い:", name); return; }
+    if (!d.nodes || !d.nodes.length) { console.warn("図に箱が無い:", name); return; }
+    var cols = Math.max.apply(null, d.nodes.map(function (n) { return n.col; })) + 1;
+    var rows = Math.max.apply(null, d.nodes.map(function (n) { return n.row; })) + 1;
+    var W = GRID.ox * 2 + (cols - 1) * GRID.cw + GRID.bw + 120, H = GRID.oy * 2 + (rows - 1) * GRID.rh + GRID.bh + 12;
+    var cap = fig.querySelector("figcaption");
+    var svg = svgEl("svg", { viewBox: "0 0 " + W + " " + H, width: W, height: H, role: "img", "aria-label": cap ? cap.textContent : name });
+    var defs = svgEl("defs");
+    var pat = svgEl("pattern", { id: "grid-" + name, width: 24, height: 24, patternUnits: "userSpaceOnUse" });
+    pat.append(svgEl("path", { d: "M 24 0 L 0 0 0 24", fill: "none", stroke: "var(--grid)", "stroke-width": 1 }));
+    var mk = svgEl("marker", { id: "arrow-" + name, viewBox: "0 0 10 10", refX: 9, refY: 5, markerWidth: 8, markerHeight: 8, orient: "auto-start-reverse" });
+    mk.append(svgEl("path", { d: "M0,0 L10,5 L0,10 z", fill: "var(--line)" }));
+    defs.append(pat, mk);
+    svg.append(defs, svgEl("rect", { width: W, height: H, fill: "url(#grid-" + name + ")" }));
+
+    var byId = {}; d.nodes.forEach(function (n) { byId[n.id] = n; });
+    (d.edges || []).forEach(function (e) {
+      var a = byId[e.from], b = byId[e.to];
+      if (!a || !b) { console.warn("矢印の端が無い:", e); return; }
+      svg.append(svgEl("path", { d: edgePath(a, b), fill: "none", stroke: "var(--line)", "stroke-width": 1.5,
+        "stroke-dasharray": e.dashed ? "5 4" : "none", "marker-end": "url(#arrow-" + name + ")" }));
+      if (e.label) {
+        var la = layoutNode(a), lb = layoutNode(b), lx, ly, anchor;
+        if (a.row === b.row) {
+          var dir = b.col > a.col ? 1 : -1;
+          lx = (la.cx + dir * la.w / 2 + lb.cx - dir * lb.w / 2) / 2; ly = la.cy - 6; anchor = "middle";
+        } else {
+          var down = b.row > a.row ? 1 : -1;
+          var y1 = la.cy + down * (la.h / 2 + (a.kind === "decision" ? 10 : 0));
+          var y2 = lb.cy - down * (lb.h / 2 + (b.kind === "decision" ? 12 : 2));
+          lx = lb.cx + 6; ly = (la.cx === lb.cx ? (y1 + y2) / 2 : ((y1 + y2) / 2 + y2) / 2); anchor = "start";
+        }
+        var t = svgEl("text", { x: lx, y: ly, "text-anchor": anchor, "font-size": 12 });
+        t.textContent = e.label; svg.append(t);
+      }
+    });
+
+    d.nodes.forEach(function (n) {
+      var r = layoutNode(n), g = svgEl("g", { class: "node", "data-node": n.id });
+      if (n.q) g.setAttribute("data-q", idsOf(n.q).join(" "));
+      var common = { fill: "var(--paper)", stroke: "var(--line)", "stroke-width": 1.5 };
+      if (n.kind === "decision") {
+        g.append(svgEl("polygon", Object.assign({ points: r.cx + "," + (r.y - 10) + " " + (r.x + r.w + 10) + "," + r.cy + " " + r.cx + "," + (r.y + r.h + 10) + " " + (r.x - 10) + "," + r.cy }, common)));
+      } else {
+        g.append(svgEl("rect", Object.assign({ x: r.x, y: r.y, width: r.w, height: r.h, rx: (n.kind === "start" || n.kind === "end") ? r.h / 2 : 8 }, common)));
+      }
+      var lines = (n.kind === "decision" ? wrapLabel(n.label, 7, 2) : wrapLabel(n.label, 13));
+      lines.forEach(function (ln, i) {
+        var t = svgEl("text", { x: r.cx, y: r.cy + (i - (lines.length - 1) / 2) * 16 + 5, "text-anchor": "middle", "font-size": 13 });
+        t.textContent = ln; g.append(t);
+      });
+      svg.append(g);
+    });
+
+    var wrap = document.createElement("div"); wrap.className = "canvas"; wrap.append(svg);
+    fig.insertBefore(wrap, fig.firstChild);
+  }
+
+  window.drawDiagrams = function () {
+    document.querySelectorAll("figure.flow[data-diagram]").forEach(drawDiagram);
+  };
+  var byQ = {}; QUESTIONS.forEach(function (q) { byQ[q.id] = q; });
+  var sent = {};
+  try { sent = JSON.parse(localStorage.getItem("ab-sent") || "{}") || {}; } catch (e) { sent = {}; }
+  function saveSent() { try { localStorage.setItem("ab-sent", JSON.stringify(sent)); } catch (e) {} }
+  var api = null, sendState = "checking", current = null;
+  var pop = document.getElementById("pop");
+
+  var STATE_TEXT = {
+    available: "",
+    checking: "送信できるか確かめています…",
+    writers_only: "編集権限が無いため Claude へ送れません。下の文面をコピーしてチャットに貼ってください。",
+    no_session: "いま受け取れる Claude のセッションがありません。下の文面をコピーしてチャットに貼ってください。",
+    off: "このビューでは Claude へ送れません。下の文面をコピーしてチャットに貼ってください。",
+    none: "このビューではコメント機能が使えません。下の文面をコピーしてチャットに貼ってください。"
+  };
+  var ERROR_TEXT = {
+    consent_required: "許可されなかったため送っていません。もう一度押すか、下の文面をコピーしてチャットに貼ってください。",
+    forbidden: "このページからは送れません。下の文面をコピーしてチャットに貼ってください。",
+    rate_limited: "送信が続いたため止められました。少し待ってから押すか、下の文面をコピーしてチャットに貼ってください。",
+    claude_unavailable: "Claude に届けられませんでした（何も投稿していません）。下の文面をコピーしてチャットに貼ってください。",
+    invalid: "文面が長すぎるか不正です。補足を短くするか、下の文面をコピーしてチャットに貼ってください。"
+  };
+
+  function el(tag, attrs, html) {
+    var e = document.createElement(tag);
+    for (var k in (attrs || {})) e.setAttribute(k, attrs[k]);
+    if (html != null) e.innerHTML = html;
+    return e;
+  }
+
+  function textIds() {
+    var ids = [];
+    document.querySelectorAll("[data-q]").forEach(function (n) { if (!n.closest("svg")) ids = ids.concat(idsOf(n.getAttribute("data-q"))); });
+    return ids;
+  }
+
+  function renderProgress() {
+    var p = document.getElementById("progress"); p.replaceChildren();
+    p.append(document.createTextNode(progressText(progress(QUESTIONS))));
+    QUESTIONS.filter(function (q) { return q.status === "open" || q.status === "recheck"; }).forEach(function (q) {
+      var b = el("button", { type: "button", class: "mk " + markerInfo(q, Object.keys(sent)).cls }, q.id);
+      b.addEventListener("click", function () { var a = findAnchor(q.id); if (a) { a.scrollIntoView({ block: "center" }); openPop(q, a); } });
+      p.append(b);
+    });
+    var orphans = orphanQuestions(QUESTIONS, textIds(), DIAGRAMS);
+    if (orphans.length) p.append(el("span", { class: "warn" }, "置き場所が無い問い：" + orphans.join("、")));
+  }
+
+  function findAnchor(id) { return document.querySelector('[data-qid="' + id + '"]'); }
+
+  function placeMarkers() {
+    document.querySelectorAll(".mk[data-qid], .mk-svg").forEach(function (n) { n.remove(); });
+    var sentIds = Object.keys(sent);
+    document.querySelectorAll("[data-q]").forEach(function (host) {
+      if (host.closest("svg")) return;
+      var after = host;
+      idsOf(host.getAttribute("data-q")).forEach(function (id) {
+        var q = byQ[id]; if (!q) { console.warn("問いのデータが無い:", id); return; }
+        var info = markerInfo(q, sentIds);
+        var b = el("button", { type: "button", class: "mk " + info.cls, "data-qid": id, "aria-label": id + " " + info.text + "：" + q.title }, id + " " + info.mark);
+        b.addEventListener("click", function () { openPop(q, b); });
+        after.after(b); after = b;
+      });
+    });
+    document.querySelectorAll("svg g.node[data-q]").forEach(function (g) {
+      var box = g.firstElementChild.getBBox(), x = box.x + box.width - 6;
+      idsOf(g.getAttribute("data-q")).forEach(function (id) {
+        var q = byQ[id]; if (!q) { console.warn("問いのデータが無い:", id); return; }
+        var info = markerInfo(q, sentIds), label = id + " " + info.mark, w = 16 + label.length * 7.5;
+        var m = document.createElementNS("http://www.w3.org/2000/svg", "g");
+        m.setAttribute("class", "mk-svg " + info.cls); m.setAttribute("data-qid", id);
+        m.setAttribute("role", "button"); m.setAttribute("tabindex", "0"); m.setAttribute("aria-label", id + " " + info.text + "：" + q.title);
+        var r = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+        r.setAttribute("x", x); r.setAttribute("y", box.y - 12); r.setAttribute("width", w); r.setAttribute("height", 20); r.setAttribute("rx", 10);
+        r.setAttribute("fill", "var(--paper)"); r.setAttribute("stroke", "currentColor"); r.setAttribute("stroke-width", 1.5);
+        var t = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        t.setAttribute("x", x + w / 2); t.setAttribute("y", box.y + 2); t.setAttribute("text-anchor", "middle"); t.setAttribute("font-size", 11);
+        t.setAttribute("style", "fill: currentColor; font-family: var(--font-mono); font-weight: 600"); t.textContent = label;
+        m.append(r, t);
+        var open = function () { openPop(q, m); };
+        m.addEventListener("click", open);
+        m.addEventListener("keydown", function (ev) { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); open(); } });
+        g.parentNode.append(m); x += w + 4;
+      });
+    });
+  }
+
+  function refresh() { window.drawDiagrams(); placeMarkers(); renderProgress(); }
+
+  function position() {
+    if (!current) return;
+    if (window.innerWidth < 640) { pop.classList.add("sheet"); pop.style.left = pop.style.top = ""; return; }
+    pop.classList.remove("sheet");
+    var r = current.anchor.getBoundingClientRect(), pw = Math.min(860, window.innerWidth - 32);
+    pop.style.width = pw + "px"; pop.style.left = (window.scrollX + 16) + "px"; pop.style.top = (r.bottom + window.scrollY + 8) + "px";
+    var w = pop.offsetWidth, h = pop.offsetHeight;
+    var left = Math.min(Math.max(window.scrollX + 16, r.left + window.scrollX), window.scrollX + window.innerWidth - w - 16);
+    var top = r.bottom + window.scrollY + 8;
+    if (window.innerHeight - r.bottom < h + 8 && r.top >= h + 16) top = r.top + window.scrollY - h - 8;
+    pop.style.left = left + "px"; pop.style.top = top + "px";
+  }
+
+  function closePop(opt) {
+    if (!current) return;
+    var a = current.anchor; current = null; pop.hidden = true; pop.replaceChildren();
+    if (opt && opt.focus === false) return;
+    var again = findAnchor(a.getAttribute("data-qid")); if (again && again.focus) again.focus();
+  }
+
+  function details(q) {
+    var d = el("details"); d.append(el("summary", null, "問いの詳細"));
+    d.append(el("div", null, (q.situation || "") + (q.example || "")));
+    var ul = el("ul"); q.options.forEach(function (o) { ul.append(el("li", null, "<strong>" + o.key + "「" + o.label + "」</strong>：" + (o.effect || ""))); });
+    d.append(ul); return d;
+  }
+
+  function renderPop(q) {
+    var info = markerInfo(q, Object.keys(sent)), box = el("div");
+    var head = el("div", { class: "pop-head" });
+    head.append(el("span", { class: "mk " + info.cls }, q.id + " " + info.mark), el("span", { class: "t" }, q.title));
+    var x = el("button", { type: "button", class: "x", "aria-label": "閉じる" }, "×"); x.addEventListener("click", function () { closePop(); }); head.append(x);
+    box.append(head);
+
+    if (q.status === "done") { box.append(el("div", { class: "answer" }, q.answer || "決定済み"), details(q)); return box; }
+    if (q.status === "revoked") {
+      var rv = el("div", { class: "revoked" }, "<strong>取り消し</strong>：" + (q.revokedWhy || "") + (q.revokedBy ? " → " : ""));
+      if (q.revokedBy && byQ[q.revokedBy]) {
+        var go = el("button", { type: "button", class: "btn ghost" }, q.revokedBy + " を開く");
+        go.addEventListener("click", function () { var a = findAnchor(q.revokedBy); if (a) openPop(byQ[q.revokedBy], a); });
+        rv.append(go);
+      }
+      box.append(rv, details(q)); return box;
+    }
+    if (sent[q.id] && q.status === "open") {
+      box.append(el("p", { class: "note" }, "送信済み（" + sent[q.id] + "）。Claude が反映すると決定に変わります。"));
+      var again = el("details"); again.append(el("summary", null, "送り直す・詳細を見る")); box.append(again);
+      box = again;
+    }
+    if (q.status === "recheck") box.append(el("div", { class: "recheck" }, "<strong>要確認</strong>：" + (q.recheckWhy || "")));
+    box.append(el("div", null, (q.situation || "") + (q.example || "")));
+
+    var group = el("div", { role: "radiogroup", "aria-label": "選択肢" });
+    q.options.forEach(function (o) {
+      var id = "opt-" + q.id + "-" + o.key, lab = el("label", { class: "opt", for: id });
+      var input = el("input", { type: "radio", name: "opt-" + q.id, id: id, value: o.key });
+      var t = el("span", null, "<strong>" + o.key + "「" + o.label + "」</strong>");
+      if (o.key === q.recommended) t.append(el("span", { class: "rec" }, "推奨"));
+      lab.append(input, t, el("span", { class: "eff" }, o.effect || "")); group.append(lab);
+    });
+    box.append(group);
+    if (q.recommendWhy) box.append(el("p", { class: "note" }, "推奨の理由：" + q.recommendWhy));
+    var noteId = "note-" + q.id; box.append(el("label", { for: noteId, class: "note" }, "補足（任意）"));
+    var note = el("textarea", { id: noteId, maxlength: "1000" }); box.append(note);
+    var askId = "ask-" + q.id, askWrap = el("div"); askWrap.hidden = true;
+    askWrap.append(el("label", { for: askId, class: "note" }, "判断に足りない文脈・質問"));
+    var ask = el("textarea", { id: askId, maxlength: "1000" }); askWrap.append(ask); box.append(askWrap);
+    var sendBtn = el("button", { type: "button", class: "btn" }, "回答を送る");
+    var askBtn = el("button", { type: "button", class: "btn ghost" }, "文脈が足りない：質問する");
+    var btns = el("div", { class: "btns" }); btns.append(sendBtn, askBtn); box.append(btns);
+    var msg = el("div", { class: "msg", role: "status" }); box.append(msg);
+    var fb = el("div"); fb.hidden = true;
+    var fbText = el("textarea", { readonly: "", "aria-label": "チャットに貼る文面" });
+    var copy = el("button", { type: "button", class: "btn ghost" }, "文面をコピー");
+    copy.addEventListener("click", function () {
+      navigator.clipboard.writeText(fbText.value).then(function () { msg.className = "msg"; msg.textContent = "コピーしました。チャットに貼ってください。"; },
+        function () { fbText.focus(); fbText.select(); msg.className = "msg"; msg.textContent = "選択しました。コピーしてチャットに貼ってください。"; });
+    });
+    fb.append(fbText, copy); box.append(fb);
+    var ui = { msg: msg, fb: fb, fbText: fbText, busy: function (on) { sendBtn.disabled = askBtn.disabled = on; },
+      resetAsk: function () { ask.value = ""; askWrap.hidden = true; askBtn.textContent = "文脈が足りない：質問する"; } };
+
+    sendBtn.addEventListener("click", function () {
+      var picked = group.querySelector("input:checked");
+      if (!picked) { msg.className = "msg err"; msg.textContent = "選択肢を 1 つ選んでください。"; return; }
+      var body = answerBody(q, picked.value, note.value);
+      send(q, buildMessage(PAGE.tag, q, "への回答", body), "選択：" + picked.value, ui);
+    });
+    askBtn.addEventListener("click", function () {
+      if (askWrap.hidden) { askWrap.hidden = false; askBtn.textContent = "質問を送る"; ask.focus(); return; }
+      var t = ask.value.trim();
+      if (!t) { msg.className = "msg err"; msg.textContent = "質問を書いてください。"; return; }
+      send(q, buildMessage(PAGE.tag, q, "について質問", t), null, ui);
+    });
+    return head.parentNode;
+  }
+
+  function showFallback(ui, text, reason) {
+    ui.fbText.value = text; ui.fb.hidden = false;
+    ui.msg.className = "msg err"; ui.msg.textContent = reason;
+  }
+
+  function safeState() { return api.canSendToClaude().catch(function () { return "off"; }); }
+
+  async function send(q, text, summary, ui) {
+    var anchorEl = current.anchor; /* await 中にポップオーバーが閉じられても使えるよう先に取る */
+    ui.busy(true); ui.msg.textContent = ""; ui.fb.hidden = true;
+    if (api && sendState !== "available") sendState = await safeState();
+    if (!api || sendState !== "available") { showFallback(ui, text, STATE_TEXT[sendState] || STATE_TEXT.off); ui.busy(false); return; }
+    ui.msg.className = "msg"; ui.msg.textContent = "送信中…（初回は許可の確認が出ます）";
+    try {
+      var anchor;
+      try { anchor = await api.anchorFor(anchorEl); }
+      catch (e0) { anchor = await api.anchorFor(anchorEl.closest("figure") || anchorEl.closest("section") || document.body); }
+      await api.sendToClaude({ anchor: anchor, text: text });
+      if (summary) {
+        sent[q.id] = summary; saveSent(); closePop({ focus: false }); refresh();
+        var nm = findAnchor(q.id); if (nm && nm.focus) nm.focus();
+      } else {
+        ui.msg.textContent = "質問を送りました。答えは本文の補足と、このスレッドに届きます。";
+        ui.resetAsk();
+      }
+    } catch (e) {
+      var code = e && e.code;
+      showFallback(ui, text, ERROR_TEXT[code] || ("送れませんでした（" + (code || "error") + "）。下の文面をコピーしてチャットに貼ってください。"));
+    } finally { ui.busy(false); }
+  }
+
+  function openPop(q, anchor) {
+    if (current && current.q === q) { closePop(); return; }
+    current = { q: q, anchor: anchor };
+    pop.replaceChildren(renderPop(q)); pop.hidden = false; position();
+    var f = pop.querySelector("input, textarea, button"); if (f) f.focus();
+  }
+
+  document.addEventListener("keydown", function (ev) { if (ev.key === "Escape") closePop(); });
+  document.addEventListener("click", function (ev) {
+    if (!current || !ev.target.isConnected || pop.contains(ev.target) || current.anchor.contains(ev.target)) return; /* 押した要素がポップオーバーの作り直しで外れた場合は外側扱いにしない */
+    if (ev.target.closest && ev.target.closest(".mk, .mk-svg, .progress")) return;
+    closePop();
+  });
+  window.addEventListener("resize", position);
+
+  async function checkState() { if (api) sendState = await safeState(); }
+  window.addEventListener("focus", checkState);
+  document.addEventListener("visibilitychange", function () { if (document.visibilityState === "visible") checkState(); });
+  (async function () {
+    try { api = window.claude && window.claude.use ? await window.claude.use("comments") : null; } catch (e) { api = null; }
+    sendState = api ? await safeState() : "none";
+  })();
+  try { refresh(); }
+  catch (e) {
+    console.error("描画に失敗:", e);
+    try { renderProgress(); } catch (e2) { console.error(e2); }
+  }
+})();
+</script>
