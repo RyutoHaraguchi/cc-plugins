@@ -23,6 +23,14 @@
       "version": "0.6.0",
       "keywords": ["typescript", "javascript", "call-graph", "visualization", "analysis"],
       "category": "productivity"
+    },
+    {
+      "name": "cc-artifact-brainstorming",
+      "description": "brainstorming の問い・承認・設計の提示を、図解アーティファクト上の目印とポップオーバーで行う",
+      "source": "./plugins/cc-artifact-brainstorming",
+      "version": "0.1.0",
+      "keywords": ["brainstorming", "artifact", "design", "superpowers", "visualization"],
+      "category": "productivity"
     }
   ]
 }

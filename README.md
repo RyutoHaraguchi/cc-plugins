@@ -8,6 +8,7 @@ Claude Code プラグインマーケットプレイス。
 |--------|-------------|
 | [cc-html](./plugins/cc-html/) | `/html` でローカル HTML 成果物（operational brief）を生成。ファイル・PR・Issue・会話文脈から人間用の理解ページを作成 |
 | [cc-func-understand](./plugins/cc-func-understand/) | /func-understand <関数名> で呼び出しグラフを解析し、自己完結のインタラクティブ HTML として可視化 |
+| [cc-artifact-brainstorming](./plugins/cc-artifact-brainstorming/) | /artifact-brainstorming で、brainstorming の問い・承認・設計の提示を図解アーティファクト上の目印とポップオーバーで行う |
 
 ## 使い方
 

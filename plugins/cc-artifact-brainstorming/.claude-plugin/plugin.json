@@ -1,0 +1,9 @@
+{
+  "name": "cc-artifact-brainstorming",
+  "description": "brainstorming の問い・承認・設計の提示を、図解アーティファクト上の目印とポップオーバーで行う",
+  "version": "0.1.0",
+  "author": {
+    "name": "ryutoharaguchi"
+  },
+  "keywords": ["brainstorming", "artifact", "design", "superpowers", "visualization"]
+}
