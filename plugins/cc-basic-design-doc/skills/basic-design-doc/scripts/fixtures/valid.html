@@ -1,0 +1,115 @@
+<title>注文同期 基本設計書</title>
+<div class="wrap">
+<header class="doc">
+  <div><div class="eyebrow">基本設計書 ／ Example</div><h1>注文同期の再試行</h1><div class="sub">issue #1</div></div>
+  <table class="meta">
+    <tr><th>文書番号</th><td data-field="doc-no"></td></tr>
+    <tr><th>版数</th><td data-field="version">1.1</td></tr>
+    <tr><th>作成日</th><td data-field="date">2026-11-09</td></tr>
+    <tr><th>状態</th><td data-field="status">レビュー中</td></tr>
+    <tr><th>ベース</th><td data-field="base">main abc1234</td></tr>
+  </table>
+</header>
+<nav class="tabs"><ol id="tablist"></ol></nav>
+<div class="panels">
+<section class="panel" id="cover" data-label="表紙・改訂履歴">
+  <div class="summary" data-block="summary"><ul><li>同期失敗時に再試行する（D-1）</li><li>残るリスクは R-1、未決は Q-1</li></ul></div>
+  <div class="tbl"><table class="t" data-table="omitted">
+    <thead><tr><th>章</th><th>扱わない理由</th></tr></thead>
+    <tbody><tr><td>4 データ設計</td><td>スキーマ変更なし</td></tr></tbody>
+  </table></div>
+  <div class="tbl"><table class="t" data-table="open-issues">
+    <thead><tr><th>No</th><th>論点</th><th>推奨</th><th>影響する箇所</th></tr></thead>
+    <tbody><tr><td data-id="Q-1">Q-1</td><td>再試行回数</td><td>3 回</td><td>D-1</td></tr></tbody>
+  </table></div>
+  <div class="tbl"><table class="t" data-table="revisions">
+    <thead><tr><th>版数</th><th>日付</th><th>内容</th><th>作成</th></tr></thead>
+    <tbody>
+      <tr><td>1.0</td><td>2026-11-08</td><td>初版</td><td>山田</td></tr>
+      <tr><td>1.1</td><td>2026-11-09</td><td>X-1 の応答を変更。レビュー指摘のため</td><td>山田</td></tr>
+    </tbody>
+  </table></div>
+  <div class="tbl"><table class="t" data-table="approvals">
+    <thead><tr><th>役割</th><th>担当</th><th>結果</th><th>日付</th></tr></thead>
+    <tbody>
+      <tr><td>作成</td><td>山田</td><td>済</td><td>2026-11-09</td></tr>
+      <tr><td>承認</td><td>山田</td><td>未</td><td></td></tr>
+    </tbody>
+  </table></div>
+</section>
+<section class="panel off" id="overview" data-label="1. 概要">
+  <div data-block="background"><p>同期が失敗すると再送されない（<code>sync.ts:10</code>）。</p></div>
+  <div data-block="purpose"><p>失敗した注文を自動で再送する。</p></div>
+  <div class="tbl"><table class="t" data-table="scope">
+    <thead><tr><th>対象</th><th>変更内容</th><th>関係する決定</th></tr></thead>
+    <tbody><tr><td><code>sync.ts</code> の <code>run</code></td><td>再試行を追加</td><td>D-1</td></tr></tbody>
+  </table></div>
+  <div class="tbl"><table class="t" data-table="out-of-scope">
+    <thead><tr><th>対象外</th><th>理由</th></tr></thead>
+    <tbody></tbody>
+  </table></div>
+  <div class="tbl"><table class="t" data-table="terms">
+    <thead><tr><th>用語</th><th>意味</th></tr></thead>
+    <tbody><tr><td>再試行</td><td>失敗した同期をもう一度行うこと</td></tr></tbody>
+  </table></div>
+</section>
+<section class="panel off" id="architecture" data-label="2. 方式設計">
+  <div class="tbl"><table class="t" data-table="alternatives">
+    <thead><tr><th>方式</th><th>仕組み</th><th>判定</th><th>理由</th></tr></thead>
+    <tbody>
+      <tr><td>キュー再投入</td><td>失敗時に再投入</td><td><span class="pill ok">採用</span></td><td>既存のキューを使える</td></tr>
+      <tr><td>定期バッチ</td><td>1 時間ごとに走査</td><td><span class="pill ng">不採用</span></td><td>遅れが大きい</td></tr>
+    </tbody>
+  </table></div>
+  <div class="tbl"><table class="t" data-table="decisions">
+    <thead><tr><th>No</th><th>論点</th><th>決定</th><th>理由</th></tr></thead>
+    <tbody><tr><td data-id="D-1">D-1</td><td>再試行の方式<span class="rev" data-rev="1.1">v1.1</span></td><td>キュー再投入</td><td>既存の仕組みで済む</td></tr></tbody>
+  </table></div>
+</section>
+<section class="panel off" id="process" data-label="3. 処理設計">
+  <figure class="fig" data-fig="3-1">
+    <script type="text/x-mermaid">
+flowchart LR
+  A --> B
+    </script>
+    <div class="mm" data-src-hash="e07394221b261392"><!--mm:start--><div class="mm-light"><svg id="mm-3-1-l" class="flowchart"><g><text>A</text></g></svg></div><div class="mm-dark"><svg id="mm-3-1-d" class="flowchart"><g><text>A</text></g></svg></div><!--mm:end--></div>
+    <figcaption class="cap">図 3-1 再投入の流れ</figcaption>
+  </figure>
+  <div class="tbl"><table class="t" data-table="paths">
+    <thead><tr><th>No</th><th>入口・きっかけ</th><th>条件</th><th>動作</th><th>関係</th></tr></thead>
+    <tbody><tr><td data-id="P-1">P-1</td><td>webhook</td><td>API 失敗</td><td>再投入</td><td>D-1・X-1</td></tr></tbody>
+  </table></div>
+</section>
+<section class="panel off" id="errors" data-label="5. 例外設計">
+  <div class="tbl"><table class="t" data-table="errors">
+    <thead><tr><th>No</th><th>事象・発生箇所</th><th>分類</th><th>応答・挙動</th><th>理由</th></tr></thead>
+    <tbody><tr><td data-id="X-1">X-1</td><td>API 5xx</td><td>障害</td><td>再投入</td><td>一時的な障害のため</td></tr></tbody>
+  </table></div>
+</section>
+<section class="panel off" id="nfr" data-label="6. 非機能・制約">
+  <div class="tbl"><table class="t" data-table="risks">
+    <thead><tr><th>No</th><th>内容</th><th>扱い</th><th>理由</th></tr></thead>
+    <tbody><tr><td data-id="R-1">R-1</td><td>二重送信</td><td>受容</td><td>冪等キーで吸収</td></tr></tbody>
+  </table></div>
+</section>
+<section class="panel off" id="test" data-label="7. テスト観点">
+  <div class="tbl"><table class="t" data-table="tests">
+    <thead><tr><th>No</th><th>種別</th><th>観点</th><th>期待結果</th><th>対応</th></tr></thead>
+    <tbody>
+      <tr><td data-id="U-1">U-1</td><td>単体</td><td>5xx で再投入</td><td>キューに 1 件</td><td>D-1・X-1</td></tr>
+      <tr><td data-id="E-1">E-1</td><td>結合</td><td>webhook から</td><td>再送される</td><td>P-1</td></tr>
+    </tbody>
+  </table></div>
+</section>
+<section class="panel off" id="evidence" data-label="8. 検証・レビュー記録">
+  <div class="tbl"><table class="t" data-table="sources">
+    <thead><tr><th>内容</th><th>出典</th><th>確度</th></tr></thead>
+    <tbody><tr><td>失敗時に再送しない</td><td><code>sync.ts:10</code></td><td><span class="pill" data-cert="コード">コード</span></td></tr></tbody>
+  </table></div>
+  <div class="tbl"><table class="t" data-table="reviews">
+    <thead><tr><th>版数</th><th>レビュー者</th><th>結果</th><th>主な指摘と対応</th></tr></thead>
+    <tbody><tr><td>1.1</td><td>独立レビュー</td><td>穴なし</td><td>なし</td></tr></tbody>
+  </table></div>
+</section>
+</div>
+</div>

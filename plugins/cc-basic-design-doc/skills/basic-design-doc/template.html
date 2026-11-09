@@ -1,0 +1,441 @@
+<title>【記入: 題名（2〜4 語の名前）】 基本設計書</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<!--
+  basic-design-doc 雛形。
+  - 「【記入」で始まる箇所はすべて置き換える。残っていると check.py が止める。
+  - data-table / data-field / data-block / data-id / data-rev / data-cert は検査用の目印。消さない・名前を変えない。
+  - 表の列（thead）は変えない。行（tbody の tr）は必要なだけ増やす。例の行は消してよい。
+  - 該当しない章（4 データ設計・6 非機能・制約）は section ごと消し、表紙の「扱わない章」表に理由を書く。
+  - 番号: D=決定 P=経路 X=例外 U=単体テスト E=結合テスト R=リスク Q=未決。定義はその表の 1 列目の data-id。
+  - 本文に D-1・図 3-1・1.3（節）・7 章 と書くと、表示時に自動でリンクになる（飛び先が無い参照はリンクにしない）。
+  - 図は <figure class="fig"> の中の <script type="text/x-mermaid"> に mermaid で書き、scripts/render_mermaid.py で SVG にする。
+    <pre class="mermaid"> は使わない（Artifact のビューアーでしか図にならず、ダウンロードした HTML ではコードのまま出る）。
+-->
+<style>
+/* Layout: 設計書の体裁。上に文書情報、その下に章タブ、本文は 1 カラムの読み物。図と表は横スクロール可の枠に入れる */
+:root {
+  --bg: #f6f7f9;
+  --paper: #ffffff;
+  --ink: #1b2330;
+  --muted: #5a6577;
+  --rule: #d6dbe3;
+  --accent: #1f4e8c;
+  --accent-soft: #e6eef8;
+  --ok: #1d6b45; --ok-bg: #e5f3ea;
+  --warn: #8a5a00; --warn-bg: #fbf1dc;
+  --ng: #9b2226; --ng-bg: #f8e5e5;
+  --code-bg: #eef1f5;
+  --f-body: "BIZ UDPGothic", "Hiragino Sans", "Yu Gothic", system-ui, sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #12161d; --paper: #1a2029; --ink: #e3e8ef; --muted: #9aa6b8; --rule: #2e3745;
+  --accent: #8fb6ea; --accent-soft: #1f2e44;
+  --ok: #7fd1a3; --ok-bg: #173327; --warn: #e8c070; --warn-bg: #3a2e14; --ng: #f0999b; --ng-bg: #3d1d1f;
+  --code-bg: #232b36; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #12161d; --paper: #1a2029; --ink: #e3e8ef; --muted: #9aa6b8; --rule: #2e3745;
+  --accent: #8fb6ea; --accent-soft: #1f2e44;
+  --ok: #7fd1a3; --ok-bg: #173327; --warn: #e8c070; --warn-bg: #3a2e14; --ng: #f0999b; --ng-bg: #3d1d1f;
+  --code-bg: #232b36; color-scheme: dark }
+* { box-sizing: border-box }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 15px; line-height: 1.75;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 24px 64px }
+.wrap { max-width: 1040px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px }
+header.doc { background: var(--paper); border: 1px solid var(--rule); padding: 20px 24px; display: grid; grid-template-columns: 1fr auto; gap: 16px; align-items: start }
+header.doc > div { min-width: 0 }
+header.doc .eyebrow { font-size: 12px; letter-spacing: .08em; color: var(--muted) }
+header.doc h1 { font-size: 24px; line-height: 1.4; margin: 4px 0 6px; text-wrap: balance }
+header.doc .sub { color: var(--muted); font-size: 13px }
+.meta { border-collapse: collapse; font-size: 12px; min-width: 260px }
+.meta th, .meta td { border: 1px solid var(--rule); padding: 3px 8px; text-align: left; white-space: nowrap }
+.meta th { background: var(--accent-soft); font-weight: 700 }
+@media (max-width: 720px) { header.doc { grid-template-columns: 1fr } .meta { min-width: 0; width: 100% } .meta td, .meta th { white-space: normal } }
+nav.tabs { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); padding-block: 6px; overflow-x: auto }
+nav.tabs ol { list-style: none; margin: 0; padding: 0; display: flex; gap: 4px; white-space: nowrap }
+nav.tabs button { font: inherit; font-size: 13px; padding: 8px 12px; border: 1px solid var(--rule); background: var(--paper); color: var(--ink); cursor: pointer }
+nav.tabs button[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: var(--paper); font-weight: 700 }
+nav.tabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg) }
+.panels { position: relative; overflow: hidden }
+section.panel { background: var(--paper); border: 1px solid var(--rule); padding: 24px 28px }
+/* 非表示の章は display:none にせず画面外に置く（タブ切り替え時に図の大きさが変わらないように） */
+section.panel.off { position: absolute; left: -300vw; top: 0; width: 100%; visibility: hidden }
+@media (max-width: 600px) { section.panel { padding: 18px 16px } }
+h2 { font-size: 20px; margin: 0 0 12px; padding-bottom: 6px; border-bottom: 2px solid var(--accent); text-wrap: balance }
+h3 { font-size: 16px; margin: 28px 0 8px; text-wrap: balance }
+h3 .no, h2 .no { font-family: var(--f-mono); color: var(--accent); margin-right: 8px; font-size: .9em }
+p { margin: 0 0 10px; max-width: 70ch }
+ul, ol.list { margin: 0 0 10px; padding-left: 1.4em; max-width: 72ch }
+li { margin: 2px 0 }
+code { font-family: var(--f-mono); font-size: .86em; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; overflow-wrap: anywhere }
+.tbl { overflow-x: auto; margin: 6px 0 14px }
+table.t { border-collapse: collapse; width: 100%; font-size: 13.5px; font-variant-numeric: tabular-nums }
+table.t th, table.t td { border: 1px solid var(--rule); padding: 6px 9px; vertical-align: top; text-align: left }
+table.t thead th { background: var(--accent-soft); font-weight: 700; white-space: nowrap }
+table.t td[data-id] { font-family: var(--f-mono); white-space: nowrap }
+.pill { display: inline-block; font-size: 12px; padding: 0 8px; border-radius: 999px; font-weight: 700; white-space: nowrap; background: var(--accent-soft); color: var(--accent) }
+.pill.ok { background: var(--ok-bg); color: var(--ok) } .pill.warn { background: var(--warn-bg); color: var(--warn) } .pill.ng { background: var(--ng-bg); color: var(--ng) }
+.pill[data-cert="未検証"] { background: var(--warn-bg); color: var(--warn) }
+.rev { display: inline-block; font-family: var(--f-mono); font-size: 11px; padding: 0 6px; margin-left: 6px; border: 1px solid var(--warn); color: var(--warn); border-radius: 3px; vertical-align: middle }
+.note { border-left: 3px solid var(--accent); background: var(--accent-soft); padding: 10px 14px; margin: 8px 0 14px; font-size: 14px }
+.note.warn { border-color: var(--warn); background: var(--warn-bg) }
+.summary { border: 1px solid var(--accent); padding: 12px 16px; margin: 0 0 16px }
+.summary ul { margin: 0 }
+.fig { border: 1px solid var(--rule); padding: 12px; margin: 8px 0 4px; overflow-x: auto; background: var(--paper) }
+.fig { margin-inline: 0 }
+.fig svg { display: block; max-width: 100%; height: auto; margin: 0 auto }
+.fig .mm-dark { display: none }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .fig .mm-light { display: none } :root:not([data-theme="light"]) .fig .mm-dark { display: block } }
+:root[data-theme="dark"] .fig .mm-light { display: none }
+:root[data-theme="dark"] .fig .mm-dark { display: block }
+.cap { font-size: 12px; color: var(--muted); margin: 0 0 16px }
+.src { font-size: 12px; color: var(--muted) }
+.kv { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; font-size: 14px; margin: 0 0 12px }
+.kv dt { font-weight: 700; color: var(--muted) } .kv dd { margin: 0; min-width: 0 }
+@media (max-width: 600px) { .kv { grid-template-columns: 1fr } }
+@media (prefers-reduced-motion: no-preference) { nav.tabs button { transition: background .15s } }
+a.xref { color: var(--accent); text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 2px }
+a.xref:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px }
+tr[id], figure[id], h3[id] { scroll-margin-top: 72px }
+.flash { animation: flash 1.6s ease-out }
+@keyframes flash { from { background: var(--warn-bg) } to { background: transparent } }
+@media (prefers-reduced-motion: reduce) { .flash { animation: none; outline: 2px solid var(--warn) } }
+</style>
+
+<div class="wrap">
+<header class="doc">
+  <div>
+    <div class="eyebrow">基本設計書 ／ 【記入: システム・プロダクト名】</div>
+    <h1>【記入: 件名（何をどう変えるか）】</h1>
+    <div class="sub">【記入: 起点（issue 番号・依頼）と関連】</div>
+  </div>
+  <table class="meta">
+    <tr><th>文書番号</th><td data-field="doc-no"></td></tr>
+    <tr><th>版数</th><td data-field="version">1.0</td></tr>
+    <tr><th>作成日</th><td data-field="date">【記入: YYYY-MM-DD】</td></tr>
+    <tr><th>状態</th><td data-field="status">作成中</td></tr>
+    <tr><th>ベース</th><td data-field="base">【記入: branch と commit（短縮 SHA）】</td></tr>
+  </table>
+</header>
+
+<nav class="tabs" aria-label="章"><ol id="tablist" role="tablist"></ol></nav>
+
+<div class="panels">
+
+<section class="panel" id="cover" data-label="表紙・改訂履歴" role="tabpanel">
+  <h2>表紙・改訂履歴</h2>
+  <div class="summary" data-block="summary">
+    <!-- 要旨: 3〜5 行。何を変えるか／主な決定／残るリスク。1 分で全体をつかめるように -->
+    <ul>
+      <li>【記入: 何を変えるか】</li>
+      <li>【記入: 主な決定（D-n を添える）】</li>
+      <li>【記入: 残るリスク・未決（R-n・Q-n を添える）】</li>
+    </ul>
+  </div>
+  <dl class="kv">
+    <dt>件名</dt><dd>【記入: 問題と対応を 1〜2 文で】</dd>
+    <dt>対象</dt><dd>【記入: リポジトリ・パッケージ・サービス】</dd>
+    <dt>本書の位置づけ</dt><dd>方式・処理・データ・例外の基本設計。実装の作業手順は含まない。コードの行番号はヘッダーの「ベース」の時点</dd>
+  </dl>
+
+  <h3>扱わない章</h3>
+  <!-- 4 データ設計・6 非機能・制約を省いたときだけ行を書く。両方あるなら tbody は空のままにする -->
+  <div class="tbl"><table class="t" data-table="omitted">
+    <thead><tr><th>章</th><th>扱わない理由</th></tr></thead>
+    <tbody>
+      <tr><td>【記入: 例 4 データ設計】</td><td>【記入: 例 スキーマ・データ形式の変更なし】</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>未決事項</h3>
+  <!-- 決定が要る穴。残っている間は状態を「承認済み」にしない。決まったら行を消し、決定事項 D-n へ移す -->
+  <div class="tbl"><table class="t" data-table="open-issues">
+    <thead><tr><th>No</th><th>論点</th><th>推奨</th><th>影響する箇所</th></tr></thead>
+    <tbody>
+      <tr><td data-id="Q-1">Q-1</td><td>【記入】</td><td>【記入】</td><td>【記入】</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>改訂履歴</h3>
+  <!-- 新しい版を下に足す。最終行の版数はヘッダーの版数と一致させる。内容には「何をどう変えたかと理由」 -->
+  <div class="tbl"><table class="t" data-table="revisions">
+    <thead><tr><th>版数</th><th>日付</th><th>内容</th><th>作成</th></tr></thead>
+    <tbody>
+      <tr><td>1.0</td><td>【記入: YYYY-MM-DD】</td><td>初版</td><td>【記入】</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>承認</h3>
+  <div class="tbl"><table class="t" data-table="approvals">
+    <thead><tr><th>役割</th><th>担当</th><th>結果</th><th>日付</th></tr></thead>
+    <tbody>
+      <tr><td>作成</td><td>【記入】</td><td>済</td><td>【記入: YYYY-MM-DD】</td></tr>
+      <tr><td>設計レビュー</td><td>独立レビュー（文脈なしの subagent）</td><td>未実施</td><td></td></tr>
+      <tr><td>承認</td><td>【記入】</td><td>未</td><td></td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section class="panel off" id="overview" data-label="1. 概要" role="tabpanel">
+  <h2><span class="no">1</span>概要</h2>
+  <h3><span class="no">1.1</span>背景</h3>
+  <div data-block="background">
+    <p>【記入: 現状の仕組みと問題。現状の挙動には出典（file:line・公式ドキュメント・実測）を付ける】</p>
+  </div>
+  <h3><span class="no">1.2</span>目的</h3>
+  <div data-block="purpose">
+    <p>【記入: 何ができるようになれば成功か】</p>
+  </div>
+  <h3><span class="no">1.3</span>範囲</h3>
+  <!-- 変更対象: ファイル・関数の粒度（未確定ならモジュール粒度）。作業手順や順序は書かない -->
+  <div class="tbl"><table class="t" data-table="scope">
+    <thead><tr><th>対象</th><th>変更内容</th><th>関係する決定</th></tr></thead>
+    <tbody>
+      <tr><td><code>【記入: path/to/file.ts の関数】</code></td><td>【記入】</td><td>【記入: D-n】</td></tr>
+    </tbody>
+  </table></div>
+  <div class="tbl"><table class="t" data-table="out-of-scope">
+    <thead><tr><th>対象外</th><th>理由</th></tr></thead>
+    <tbody>
+      <tr><td>【記入】</td><td>【記入】</td></tr>
+    </tbody>
+  </table></div>
+  <h3><span class="no">1.4</span>用語</h3>
+  <!-- 初めて出る語・本書で作った語を定義する。本書で作った語は「本書での呼び名」と書いて正式な用語と区別する -->
+  <div class="tbl"><table class="t" data-table="terms">
+    <thead><tr><th>用語</th><th>意味</th></tr></thead>
+    <tbody>
+      <tr><td>【記入】</td><td>【記入】</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section class="panel off" id="architecture" data-label="2. 方式設計" role="tabpanel">
+  <h2><span class="no">2</span>方式設計</h2>
+  <h3><span class="no">2.1</span>方式の比較と採否</h3>
+  <!-- 採った案と採らなかった案。判定は「採用」「不採用」「見送り」のどれか。理由は全行に書く -->
+  <div class="tbl"><table class="t" data-table="alternatives">
+    <thead><tr><th>方式</th><th>仕組み</th><th>判定</th><th>理由</th></tr></thead>
+    <tbody>
+      <tr><td>【記入】</td><td>【記入】</td><td><span class="pill ok">採用</span></td><td>【記入】</td></tr>
+      <tr><td>【記入】</td><td>【記入】</td><td><span class="pill ng">不採用</span></td><td>【記入】</td></tr>
+    </tbody>
+  </table></div>
+  <h3><span class="no">2.2</span>構成</h3>
+  <figure class="fig" data-fig="2-1">
+    <script type="text/x-mermaid">
+flowchart LR
+  A["【記入: 構成要素】"] --> B["【記入: 構成要素】"]
+    </script>
+    <div class="mm"></div>
+    <figcaption class="cap">図 2-1 【記入: 図の説明。線の種類の意味など】</figcaption>
+  </figure>
+  <h3><span class="no">2.3</span>決定事項</h3>
+  <!-- 設計の分岐ごとに 1 行。利用者が決めたもの・作成者が決めたもの（決定に「作成者判断」と添える）の両方 -->
+  <div class="tbl"><table class="t" data-table="decisions">
+    <thead><tr><th>No</th><th>論点</th><th>決定</th><th>理由</th></tr></thead>
+    <tbody>
+      <tr><td data-id="D-1">D-1</td><td>【記入】</td><td>【記入】</td><td>【記入】</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section class="panel off" id="process" data-label="3. 処理設計" role="tabpanel">
+  <h2><span class="no">3</span>処理設計</h2>
+  <!-- 処理ごとに h3 を立て、シーケンス図かフローチャートを 1 つ以上置く。判定式は書いてよいがコード本体は書かない。
+       図を足すときは figure ごと複製し、data-fig を図番号にする。<div class="mm"></div> は空のまま（render_mermaid.py が埋める） -->
+  <h3><span class="no">3.1</span>【記入: 処理名】</h3>
+  <figure class="fig" data-fig="3-1">
+    <script type="text/x-mermaid">
+sequenceDiagram
+  autonumber
+  participant C as 【記入】
+  participant S as 【記入】
+  C->>S: 【記入】
+  S-->>C: 【記入】
+    </script>
+    <div class="mm"></div>
+    <figcaption class="cap">図 3-1 【記入: 図の説明】</figcaption>
+  </figure>
+  <h3><span class="no">3.2</span>経路ごとの動作</h3>
+  <!-- この変更が効く入口・きっかけをすべて挙げる。経路ごとに結果が違うなら全部書く -->
+  <div class="tbl"><table class="t" data-table="paths">
+    <thead><tr><th>No</th><th>入口・きっかけ</th><th>条件</th><th>動作</th><th>関係</th></tr></thead>
+    <tbody>
+      <tr><td data-id="P-1">P-1</td><td>【記入】</td><td>【記入】</td><td>【記入】</td><td>【記入: D-n・X-n】</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section class="panel off" id="data" data-label="4. データ設計" role="tabpanel">
+  <h2><span class="no">4</span>データ設計</h2>
+  <!-- 該当する節だけ書く。スキーマ・キー・トークン・API・メッセージの形と、既存データの扱い -->
+  <h3><span class="no">4.1</span>【記入: データ構造・インターフェース名】</h3>
+  <div class="tbl"><table class="t">
+    <thead><tr><th>項目</th><th>内容</th><th>変更</th></tr></thead>
+    <tbody>
+      <tr><td>【記入】</td><td>【記入】</td><td>【記入: 新規・変更・既存】</td></tr>
+    </tbody>
+  </table></div>
+  <h3><span class="no">4.2</span>既存データと移行</h3>
+  <p>【記入: 旧形式のデータ・トークンがどの環境に存在し、どう扱うか】</p>
+</section>
+
+<section class="panel off" id="errors" data-label="5. 例外設計" role="tabpanel">
+  <h2><span class="no">5</span>例外設計</h2>
+  <!-- 分類は「拒否」「障害」「部分失敗」「競合」のどれか。拒否=入力・認可が原因、障害=外部・基盤が原因。
+       障害時に通すか止めるか（fail-open / fail-closed）は理由欄に根拠を書く -->
+  <div class="tbl"><table class="t" data-table="errors">
+    <thead><tr><th>No</th><th>事象・発生箇所</th><th>分類</th><th>応答・挙動</th><th>理由</th></tr></thead>
+    <tbody>
+      <tr><td data-id="X-1">X-1</td><td>【記入】</td><td>拒否</td><td>【記入】</td><td>【記入】</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section class="panel off" id="nfr" data-label="6. 非機能・制約" role="tabpanel">
+  <h2><span class="no">6</span>非機能・制約</h2>
+  <!-- 該当する節だけ書く。数値には根拠（計測・計算・出典）を添える -->
+  <h3><span class="no">6.1</span>【記入: 性能・可用性・環境と権限 など】</h3>
+  <p>【記入】</p>
+  <h3><span class="no">6.2</span>残るリスク</h3>
+  <!-- 扱いは「受容」「別対応」「対策済み」のどれか。別対応なら起票先を書く -->
+  <div class="tbl"><table class="t" data-table="risks">
+    <thead><tr><th>No</th><th>内容</th><th>扱い</th><th>理由</th></tr></thead>
+    <tbody>
+      <tr><td data-id="R-1">R-1</td><td>【記入】</td><td>受容</td><td>【記入】</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section class="panel off" id="test" data-label="7. テスト観点" role="tabpanel">
+  <h2><span class="no">7</span>テスト観点</h2>
+  <!-- U=単体（自動テスト）、E=結合（実環境・手動を含む）。対応欄に確かめる D-n・P-n・X-n を書く。
+       テストしない D-n・X-n は、その行の理由に「（テスト不要: 理由）」と書く -->
+
+  <div class="tbl"><table class="t" data-table="tests">
+    <thead><tr><th>No</th><th>種別</th><th>観点</th><th>期待結果</th><th>対応</th></tr></thead>
+    <tbody>
+      <tr><td data-id="U-1">U-1</td><td>単体</td><td>【記入】</td><td>【記入】</td><td>【記入: D-n・X-n】</td></tr>
+      <tr><td data-id="E-1">E-1</td><td>結合</td><td>【記入】</td><td>【記入】</td><td>【記入: P-n】</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section class="panel off" id="evidence" data-label="8. 検証・レビュー記録" role="tabpanel">
+  <h2><span class="no">8</span>検証・レビュー記録</h2>
+  <h3><span class="no">8.1</span>一次情報・実測</h3>
+  <!-- 本文が依って立つ事実。確度は「公式」「コード」「実測」「引用」（材料が引くだけで原典未読）「未検証」のどれか -->
+  <div class="tbl"><table class="t" data-table="sources">
+    <thead><tr><th>内容</th><th>出典</th><th>確度</th></tr></thead>
+    <tbody>
+      <tr><td>【記入】</td><td><code>【記入: file:line・URL・記録】</code></td><td><span class="pill" data-cert="コード">コード</span></td></tr>
+    </tbody>
+  </table></div>
+  <h3><span class="no">8.2</span>レビュー経過</h3>
+  <div class="tbl"><table class="t" data-table="reviews">
+    <thead><tr><th>版数</th><th>レビュー者</th><th>結果</th><th>主な指摘と対応</th></tr></thead>
+    <tbody>
+      <!-- レビュー前は「未実施」のまま検査を通してよい。未実施のまま状態を「レビュー中」以降にすると check.py が止める -->
+      <tr><td>1.0</td><td>独立レビュー（文脈なしの subagent）</td><td>未実施</td><td>—</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+</div>
+</div>
+
+<script>
+(function () {
+  var panels = Array.prototype.slice.call(document.querySelectorAll("section.panel"));
+  var list = document.getElementById("tablist");
+
+  /* 参照先に id を付ける: 番号の行（D-1 など）・図（fig-3-1）・節（s-1-3）・章（パネルの id） */
+  function mark(el, id) { if (!document.getElementById(id)) el.id = id; }
+  document.querySelectorAll("td[data-id]").forEach(function (td) { var tr = td.closest("tr"); if (tr) mark(tr, td.getAttribute("data-id")); });
+  document.querySelectorAll("figure[data-fig]").forEach(function (f) { mark(f, "fig-" + f.getAttribute("data-fig")); });
+  var chapters = {};
+  panels.forEach(function (p) {
+    var no = p.querySelector("h2 .no"); if (no) chapters[no.textContent.trim()] = p.id;
+    p.querySelectorAll("h3 .no").forEach(function (s) { mark(s.parentNode, "s-" + s.textContent.trim().replace(/\./g, "-")); });
+  });
+
+  /* 本文中の参照をリンクにする */
+  var RE = /(?<![A-Za-z0-9_])([DPXUERQ]-\d+)(?!\d)|図\s?(\d+-\d+)(?!\d)|(?<!\d)第?\s?(\d+)\s?章|(?<![\d.v])(\d+\.\d+)(?![\d.])/g;
+  var SKIP = "a,script,style,svg,h2,h3,thead,code,.rev,td[data-id],[data-table=revisions],[data-table=reviews]";
+  function targetOf(m) {
+    if (m[1]) return m[1];
+    if (m[2]) return "fig-" + m[2];
+    if (m[3]) return chapters[m[3]];
+    return "s-" + m[4].replace(".", "-");
+  }
+  panels.forEach(function (p) {
+    var walker = document.createTreeWalker(p, NodeFilter.SHOW_TEXT, {
+      acceptNode: function (n) { return n.parentElement.closest(SKIP) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT; }
+    });
+    var nodes = []; while (walker.nextNode()) nodes.push(walker.currentNode);
+    nodes.forEach(function (node) {
+      var text = node.nodeValue, last = 0, frag = null, m;
+      RE.lastIndex = 0;
+      while ((m = RE.exec(text))) {
+        var id = targetOf(m), el = id && document.getElementById(id);
+        if (!el || el.contains(node)) continue;
+        frag = frag || document.createDocumentFragment();
+        frag.appendChild(document.createTextNode(text.slice(last, m.index)));
+        var a = document.createElement("a");
+        a.className = "xref"; a.href = "#" + id; a.textContent = m[0];
+        frag.appendChild(a); last = m.index + m[0].length;
+      }
+      if (frag) { frag.appendChild(document.createTextNode(text.slice(last))); node.parentNode.replaceChild(frag, node); }
+    });
+  });
+
+  var buttons = panels.map(function (p) {
+    var li = document.createElement("li");
+    var b = document.createElement("button");
+    b.type = "button"; b.id = "tab-" + p.id; b.setAttribute("role", "tab");
+    b.setAttribute("aria-controls", p.id); b.textContent = p.getAttribute("data-label");
+    p.setAttribute("aria-labelledby", b.id);
+    b.addEventListener("click", function () { show(p.id, true) });
+    li.appendChild(b); list.appendChild(li); return b;
+  });
+  function show(id, push) {
+    var panelId = id, target = null;
+    if (!panels.some(function (p) { return p.id === id })) {
+      target = id ? document.getElementById(id) : null;
+      var owner = target && target.closest("section.panel");
+      panelId = owner ? owner.id : panels[0].id;
+      if (!owner) target = null;
+    }
+    panels.forEach(function (p, i) {
+      var on = p.id === panelId;
+      p.classList.toggle("off", !on);
+      p.setAttribute("aria-hidden", on ? "false" : "true");
+      buttons[i].setAttribute("aria-selected", on ? "true" : "false");
+      buttons[i].tabIndex = on ? 0 : -1;
+    });
+    if (target) {
+      target.scrollIntoView({ block: "center" });
+      target.classList.remove("flash"); void target.offsetWidth; target.classList.add("flash");
+    }
+    if (push && location.hash !== "#" + id) { try { history.replaceState(null, "", "#" + id) } catch (e) { location.hash = id } }
+  }
+  document.addEventListener("click", function (e) {
+    var a = e.target.closest && e.target.closest("a.xref"); if (!a) return;
+    var id = a.getAttribute("href").slice(1);
+    if (location.hash === "#" + id) { e.preventDefault(); show(id, false) }
+  });
+  list.addEventListener("keydown", function (e) {
+    var i = buttons.indexOf(document.activeElement); if (i < 0) return;
+    if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+      var n = (i + (e.key === "ArrowRight" ? 1 : -1) + buttons.length) % buttons.length;
+      buttons[n].focus(); show(panels[n].id, true); e.preventDefault();
+    }
+  });
+  window.addEventListener("hashchange", function () { show(location.hash.slice(1), false) });
+  show(location.hash.slice(1) || panels[0].id, false);
+})();
+</script>
