@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 import unittest
 
@@ -89,6 +90,64 @@ class RenderTest(unittest.TestCase):
         out, _ = render_mermaid.render_html(DOC, FakeRenderer())
         self.assertEqual(check.figure_errors(out), [])
         self.assertTrue(check.figure_errors(DOC))
+
+    def test_attribute_order_case_and_extra_class(self):
+        variants = [
+            DOC.replace('<script type="text/x-mermaid">', '<script id="s" type="text/x-mermaid">'),
+            DOC.replace('<script type="text/x-mermaid">', '<SCRIPT TYPE="text/x-mermaid">').replace("</script>", "</SCRIPT>"),
+            DOC.replace('<script type="text/x-mermaid">', '<script\n  type = "text/x-mermaid">'),
+            DOC.replace('<figure class="fig"', '<figure class="fig wide"'),
+            DOC.replace('<figure class="fig" data-fig="3-1">', '<figure data-fig="3-1" class="fig">'),
+        ]
+        for v in variants:
+            out, n = render_mermaid.render_html(v, FakeRenderer())
+            self.assertEqual(n, 1, v)
+            self.assertEqual(check.figure_errors(out), [], v)
+            self.assertTrue(check.figure_errors(v), v)
+
+    def test_slot_with_whitespace_or_attributes(self):
+        for slot in ('<div class="mm">\n  </div>', '<div aria-label="図" class="mm"></div>', '<div class="mm extra"></div>'):
+            out, n = render_mermaid.render_html(DOC.replace('<div class="mm"></div>', slot), FakeRenderer())
+            self.assertEqual(n, 1, slot)
+            self.assertEqual(check.figure_errors(out), [], slot)
+
+    def test_commented_out_figure_is_ignored(self):
+        doc = DOC + '<!-- <figure class="fig" data-fig="9-9"><script type="text/x-mermaid">broken</script><div class="mm"></div></figure> -->'
+        r = FakeRenderer()
+        out, n = render_mermaid.render_html(doc, r)
+        self.assertEqual(n, 1)
+        self.assertTrue(all(c[1].startswith("mm-3-1") for c in r.calls))
+        self.assertEqual(check.figure_errors(out), [])
+
+    def test_template_figures(self):
+        with open(os.path.join(HERE, "..", "template.html"), encoding="utf-8") as f:
+            figs = [f["fig"] for f in render_mermaid.scan_figures(f.read())]
+        self.assertEqual(figs, ["2-1", "3-1"])
+
+    def test_broken_cache_is_rerendered(self):
+        out, _ = render_mermaid.render_html(DOC, FakeRenderer())
+        broken = re.sub(r"<!--mm:start-->.*?<!--mm:end-->", "<!--mm:start--><div>bad</div><!--mm:end-->", out, flags=re.S)
+        out2, n = render_mermaid.render_html(broken, FakeRenderer())
+        self.assertEqual(n, 1)
+        self.assertEqual(check.figure_errors(out2), [])
+
+    def test_duplicate_data_fig_is_rejected(self):
+        dup = DOC.replace("</section>", DOC.split("\n", 1)[1].split("</section>")[0] + "</section>")
+        with self.assertRaises(render_mermaid.RenderError) as cm:
+            render_mermaid.render_html(dup, FakeRenderer())
+        self.assertIn("3-1", str(cm.exception))
+        self.assertTrue(any("3-1" in e for e in check.figure_errors(dup)))
+
+    def test_timeout_becomes_render_error(self):
+        import subprocess
+        import tempfile
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(render_mermaid.shutil, "which", return_value="/bin/npx"), \
+                mock.patch.object(render_mermaid.subprocess, "run", side_effect=subprocess.TimeoutExpired("npx", 300)):
+            renderer = render_mermaid.make_cli_renderer(tmp)
+            with self.assertRaises(render_mermaid.RenderError) as cm:
+                render_mermaid.render_html(DOC, renderer)
+        self.assertIn("3-1", str(cm.exception))
 
 
 if __name__ == "__main__":

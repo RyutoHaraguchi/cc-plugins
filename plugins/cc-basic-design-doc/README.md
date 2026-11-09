@@ -47,7 +47,7 @@ claude --plugin-dir ./plugins/cc-basic-design-doc
 ## 使い方
 
 ```
-/basic-design-doc docs/specs/2026-11-09-session-revocation-memo.md
+/basic-design-doc docs/specs/2026-11-09-order-retry-memo.md
 ```
 
 1. 材料（会話での決定・設計メモ・issue）を読み、対象リポジトリのベース commit を決めて、現状の挙動をコードで裏取りする

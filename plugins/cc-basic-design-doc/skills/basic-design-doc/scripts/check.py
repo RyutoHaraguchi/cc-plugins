@@ -57,11 +57,7 @@ SECRET_RES = [
 ]
 
 
-FIG_RE = re.compile(r'<figure\b[^>]*class="fig"[^>]*>(.*?)</figure>', re.S)
-FIG_ID_RE = re.compile(r'<figure\b[^>]*data-fig="([^"]*)"')
-SRC_RE = re.compile(r'<script type="text/x-mermaid">(.*?)</script>', re.S)
-SLOT_RE = re.compile(r'<div class="mm"(?P<attrs>[^>]*)>(?:<!--mm:start-->(?P<body>.*?)<!--mm:end-->)?</div>', re.S)
-PRE_MERMAID_RE = re.compile(r'<pre\b[^>]*class="[^"]*\bmermaid\b[^"]*"')
+FIG_ID_FORMAT = re.compile(r"\d+-\d+")
 
 
 def src_hash(source):
@@ -69,30 +65,150 @@ def src_hash(source):
     return hashlib.sha256(source.strip().encode("utf-8")).hexdigest()[:16]
 
 
-def iter_figures(html):
-    """(図の番号, 図の定義, 枠の match, figure の match) を順に返す。定義の無い figure は飛ばす"""
-    for i, fm in enumerate(FIG_RE.finditer(html), 1):
-        src = SRC_RE.search(fm.group(1))
-        if not src:
-            continue
-        idm = FIG_ID_RE.match(fm.group(0))
-        yield (idm.group(1) if idm else str(i)), src.group(1), SLOT_RE.search(fm.group(1)), fm
+class _FigureScanner(HTMLParser):
+    """図（figure.fig の中の script[type=text/x-mermaid] と div.mm）を、元の HTML での位置付きで拾う。
+    コメントの中は拾わない。タグ・属性名の大文字小文字、属性の順序・空白、class の追加に左右されない。"""
+
+    def __init__(self, html):
+        super().__init__(convert_charrefs=False)
+        self.html = html
+        self.line_starts = [0] + [m.end() for m in re.finditer("\n", html)]
+        self.figures = []
+        self.cur = None
+        self.fig_nest = 0
+        self.src_buf = None
+        self.slot_depth = 0
+        self.loose_sources = 0
+        self.pre_mermaid = 0
+        self.feed(html)
+        self.close()
+        if self.cur is not None:
+            self.figures.append(self.cur)
+
+    def _off(self):
+        line, col = self.getpos()
+        return self.line_starts[line - 1] + col
+
+    def _start(self, tag, attrs, selfclosing):
+        a = {k.lower(): (v or "") for k, v in attrs}
+        cls = a.get("class", "").split()
+        start = self._off()
+        end = start + len(self.get_starttag_text())
+        is_src = tag == "script" and a.get("type", "").strip().lower() == "text/x-mermaid"
+        if tag == "pre" and "mermaid" in cls:
+            self.pre_mermaid += 1
+        if self.cur is None:
+            if tag == "figure" and "fig" in cls and not selfclosing:
+                self.cur = {"fig": a.get("data-fig"), "source": None, "sources": 0, "slot": None, "start": start}
+                self.fig_nest = 0
+            elif is_src:
+                self.loose_sources += 1
+                self.src_buf = []
+            return
+        if tag == "figure" and not selfclosing:
+            self.fig_nest += 1
+        if is_src:
+            self.cur["sources"] += 1
+            self.src_buf = []
+        if tag == "div":
+            if self.slot_depth:
+                if not selfclosing:
+                    self.slot_depth += 1
+            elif "mm" in cls and self.cur["slot"] is None:
+                self.cur["slot"] = {"start": start, "inner_start": end, "attrs": a}
+                if selfclosing:
+                    self.cur["slot"].update(inner_end=end, end=end)
+                else:
+                    self.slot_depth = 1
+
+    def handle_starttag(self, tag, attrs):
+        self._start(tag, attrs, False)
+
+    def handle_startendtag(self, tag, attrs):
+        self._start(tag, attrs, True)
+
+    def handle_endtag(self, tag):
+        start = self._off()
+        end = self.html.find(">", start) + 1 or len(self.html)
+        if tag == "script" and self.src_buf is not None:
+            if self.cur is not None and self.cur["source"] is None:
+                self.cur["source"] = "".join(self.src_buf)
+            self.src_buf = None
+        if self.cur is None:
+            return
+        if tag == "div" and self.slot_depth:
+            self.slot_depth -= 1
+            if self.slot_depth == 0:
+                self.cur["slot"].update(inner_end=start, end=end)
+        if tag == "figure":
+            if self.fig_nest:
+                self.fig_nest -= 1
+            else:
+                self.cur["end"] = end
+                self.figures.append(self.cur)
+                self.cur = None
+
+    def handle_data(self, data):
+        if self.src_buf is not None:
+            self.src_buf.append(data)
+
+
+def scan_figures(html):
+    """定義を持つ図の一覧。各要素は fig（data-fig、無ければ通し番号）・source・slot（位置と属性、無ければ None）"""
+    sc = _FigureScanner(html)
+    out = []
+    for i, f in enumerate([f for f in sc.figures if f["source"] is not None], 1):
+        f = dict(f)
+        f["has_fig_id"] = bool(f["fig"])
+        f["fig"] = f["fig"] or str(i)
+        slot = f["slot"]
+        if slot is not None and "end" not in slot:
+            f["slot"] = None
+        out.append(f)
+    return out, sc
+
+
+def slot_body(html, slot):
+    return html[slot["inner_start"]:slot["inner_end"]]
+
+
+def slot_is_rendered(html, slot, source):
+    """枠に light と dark の SVG があり、記録したハッシュが今の定義と一致するか"""
+    if slot is None or slot["attrs"].get("data-src-hash") != src_hash(source):
+        return False
+    tb = TreeBuilder()
+    tb.feed(slot_body(html, slot))
+    tb.close()
+    for cls in ("mm-light", "mm-dark"):
+        boxes = tb.root.find_all(lambda n, c=cls: n.tag == "div" and c in n.classes())
+        if not boxes or not boxes[0].find_all(lambda n: n.tag == "svg"):
+            return False
+    return True
 
 
 def figure_errors(html):
     errors = []
-    if PRE_MERMAID_RE.search(re.sub(r"<!--.*?-->", "", html, flags=re.S)):
-        errors.append('<pre class="mermaid"> は使わない（ダウンロードした HTML で図にならない）。figure + <script type="text/x-mermaid"> で書き、render_mermaid.py で SVG にする')
-    for fig, source, slot, _ in iter_figures(html):
-        if slot is None:
-            errors.append(f'図 {fig} に SVG の枠 <div class="mm"></div> が無い')
-            continue
-        body = slot.group("body") or ""
-        hm = re.search(r'data-src-hash="([^"]*)"', slot.group("attrs"))
-        if "mm-light" not in body or "mm-dark" not in body or "<svg" not in body:
-            errors.append(f"図 {fig} が SVG になっていない。render_mermaid.py を実行する")
-        elif not hm or hm.group(1) != src_hash(source):
-            errors.append(f"図 {fig} の定義が SVG にした後で変わっている。render_mermaid.py を実行する")
+    figures, sc = scan_figures(html)
+    if sc.pre_mermaid:
+        errors.append('<pre class="mermaid"> は使わない（ダウンロードした HTML で図にならない）。figure.fig の中の script（type=text/x-mermaid）で書き、render_mermaid.py で SVG にする')
+    if sc.loose_sources:
+        errors.append(f'figure.fig の外に図の定義（script type=text/x-mermaid）が {sc.loose_sources} 個ある。figure.fig の中に入れる')
+    seen = {}
+    for f in figures:
+        fig = f["fig"]
+        if not f["has_fig_id"]:
+            errors.append(f"図 {fig} 番目に data-fig（図番号 章-連番）が無い")
+        elif not FIG_ID_FORMAT.fullmatch(fig):
+            errors.append(f"図 {fig} の data-fig は「章-連番」（例 3-1）にする")
+        if fig in seen:
+            errors.append(f"図番号 {fig} が重複している")
+        seen[fig] = True
+        if f["sources"] > 1:
+            errors.append(f"図 {fig} に図の定義が {f['sources']} 個ある（1 つにする）")
+        if f["slot"] is None:
+            errors.append(f'図 {fig} に SVG の枠（div.mm）が無い')
+        elif not slot_is_rendered(html, f["slot"], f["source"]):
+            errors.append(f"図 {fig} が SVG になっていないか、定義を変えた後で描き直していない。render_mermaid.py を実行する")
     return errors
 
 
@@ -103,10 +219,10 @@ class Node:
         self.parent = parent
         self.children = []  # Node または str
 
-    def text(self):
-        if self.tag in ("style", "script"):
+    def text(self, skip=("style", "script")):
+        if self.tag in skip:
             return ""
-        return "".join(c if isinstance(c, str) else c.text() for c in self.children)
+        return "".join(c if isinstance(c, str) else c.text(skip) for c in self.children)
 
     def iter(self):
         yield self
@@ -181,6 +297,10 @@ def section_of(node):
 def check(html):
     errors, warnings = [], []
     no_comments = re.sub(r"<!--.*?-->", "", html, flags=re.S)
+
+    # 0. 公開時に補われる外枠（Artifact の read が返すファイルに付いている）が残っていないか
+    if re.match(r"\s*(<!doctype|<html\b)", no_comments, re.I):
+        errors.append("先頭に <!doctype>・<html> の外枠が残っている。公開時に補われるので、<body> までと末尾の </body></html> を外し、<title> から始める")
 
     # 1. 置き換え忘れ
     count = no_comments.count("【記入")
@@ -282,7 +402,8 @@ def check(html):
             if norm(el.text()) != ident:
                 errors.append(f"番号 {ident} のセルの表示が「{norm(el.text())}」になっている")
     body_text = root.text()
-    for m in REF_RE.finditer(body_text):
+    # <code> の中（外部の識別子など）と図の SVG は参照として扱わない
+    for m in REF_RE.finditer(root.text(skip=("style", "script", "code", "svg"))):
         ref = m.group(0)
         if ref not in defined:
             errors.append(f"{ref} が参照されているが、どの表にも定義が無い")
@@ -314,17 +435,26 @@ def check(html):
     if fields.get("status") == "承認済み":
         if parsed.get("open-issues"):
             errors.append("未決事項が残っているのに状態が「承認済み」")
-        approved = [r for r in parsed.get("approvals", []) if cell(r, 0) == "承認" and cell(r, 2) not in ("", "未")]
+        approved = [r for r in parsed.get("approvals", []) if cell(r, 0) == "承認" and cell(r, 2) == "承認"]
+        if approved and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", cell(approved[0], 3)):
+            errors.append("承認欄の「承認」行の日付が YYYY-MM-DD で入っていないのに状態が「承認済み」")
         if not approved:
-            errors.append("承認欄の「承認」行の結果が入っていないのに状態が「承認済み」")
+            errors.append("承認欄の「承認」行の結果が「承認」になっていないのに状態が「承認済み」")
 
     # 10b. 独立レビューが済むまでは「作成中」
     if fields.get("status") in ("レビュー中", "承認済み"):
         if any(cell(r, 2) == "未実施" for r in parsed.get("reviews", [])):
             errors.append(f"レビュー経過に「未実施」の行があるのに状態が「{fields['status']}」")
 
+    # 10c. 設計レビューにブロッカーが残っていれば「作成中」
+    if fields.get("status") in ("レビュー中", "承認済み"):
+        if any(cell(r, 0) == "設計レビュー" and "ブロッカーあり" in cell(r, 2) for r in parsed.get("approvals", [])):
+            errors.append(f"承認欄の設計レビューが「ブロッカーあり」なのに状態が「{fields['status']}」")
+
     # 11. 図
-    if "process" in sections and not sections["process"].find_all(lambda n: n.tag == "script" and n.attrs.get("type") == "text/x-mermaid"):
+    if "process" in sections and not sections["process"].find_all(
+            lambda n: n.tag == "figure" and "fig" in n.classes()
+            and n.find_all(lambda m: m.tag == "script" and m.attrs.get("type", "").strip().lower() == "text/x-mermaid")):
         errors.append("処理設計（id=\"process\"）に図（figure + <script type=\"text/x-mermaid\">）が無い")
     errors.extend(figure_errors(html))
 

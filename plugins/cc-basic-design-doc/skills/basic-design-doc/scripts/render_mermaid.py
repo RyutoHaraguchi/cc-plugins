@@ -18,7 +18,8 @@ import sys
 import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from check import SLOT_RE, iter_figures, src_hash  # noqa: E402
+import check  # noqa: E402
+from check import src_hash  # noqa: E402
 
 MERMAID_CLI = "@mermaid-js/mermaid-cli@11.17.1"
 FONT = '"Hiragino Sans", "Yu Gothic", "Noto Sans JP", "BIZ UDPGothic", sans-serif'
@@ -53,15 +54,25 @@ def _clean_svg(svg, svg_id):
     return _prefix_plain_ids(svg, svg_id)
 
 
+def scan_figures(html):
+    """定義を持つ図の一覧（check.py と同じ読み方）"""
+    return check.scan_figures(html)[0]
+
+
 def render_html(html, renderer, force=False):
     """(新しい HTML, 描いた図の数) を返す。renderer(source, svg_id, theme) は SVG 文字列を返す"""
-    out, pos, count = [], 0, 0
-    for fig, raw_source, slot, fm in iter_figures(html):
-        if slot is None:
-            raise RenderError(f'図 {fig}: SVG の枠 <div class="mm"></div> が無い')
-        h = src_hash(raw_source)
-        hm = re.search(r'data-src-hash="([^"]*)"', slot.group("attrs"))
-        if not force and hm and hm.group(1) == h and slot.group("body"):
+    figures = scan_figures(html)
+    seen = set()
+    for f in figures:
+        if f["fig"] in seen:
+            raise RenderError(f"図番号 {f['fig']} が重複している（data-fig を図ごとに変える）")
+        seen.add(f["fig"])
+        if f["slot"] is None:
+            raise RenderError(f'図 {f["fig"]}: SVG の枠 div.mm が無い')
+    edits = []
+    for f in figures:
+        fig, raw_source, slot = f["fig"], f["source"], f["slot"]
+        if not force and check.slot_is_rendered(html, slot, raw_source):
             continue
         source = htmlmod.unescape(raw_source).strip() + "\n"
         base = "mm-" + re.sub(r"[^A-Za-z0-9-]", "-", fig)
@@ -73,15 +84,11 @@ def render_html(html, renderer, force=False):
             except RenderError as e:
                 raise RenderError(f"図 {fig}（{theme}）: {e}") from None
             parts.append(f'<div class="{cls}">{_clean_svg(svg, svg_id)}</div>')
-        new_slot = f'<div class="mm" data-src-hash="{h}"><!--mm:start-->{"".join(parts)}<!--mm:end--></div>'
-        start = fm.start(1) + slot.start()
-        end = fm.start(1) + slot.end()
-        out.append(html[pos:start])
-        out.append(new_slot)
-        pos = end
-        count += 1
-    out.append(html[pos:])
-    return "".join(out), count
+        new_slot = f'<div class="mm" data-src-hash="{src_hash(raw_source)}"><!--mm:start-->{"".join(parts)}<!--mm:end--></div>'
+        edits.append((slot["start"], slot["end"], new_slot))
+    for start, end, text in sorted(edits, reverse=True):
+        html = html[:start] + text + html[end:]
+    return html, len(edits)
 
 
 def _find_chrome():
@@ -115,11 +122,16 @@ def make_cli_renderer(workdir):
         dst = os.path.join(workdir, f"{svg_id}.svg")
         with open(src, "w", encoding="utf-8") as f:
             f.write(source)
-        proc = subprocess.run(
-            [npx, "-y", MERMAID_CLI, "-q", "-i", src, "-o", dst, "-t", theme, "-b", "transparent",
-             "-I", svg_id, "-c", mconf, "-p", pconf],
-            capture_output=True, text=True, env=env, timeout=300,
-        )
+        try:
+            proc = subprocess.run(
+                [npx, "-y", MERMAID_CLI, "-q", "-i", src, "-o", dst, "-t", theme, "-b", "transparent",
+                 "-I", svg_id, "-c", mconf, "-p", pconf],
+                capture_output=True, text=True, env=env, timeout=300,
+            )
+        except subprocess.TimeoutExpired:
+            raise RenderError("mermaid-cli が 300 秒で終わらなかった（初回は取得に時間がかかる。もう一度実行する）") from None
+        except OSError as e:
+            raise RenderError(f"mermaid-cli を起動できない: {e}") from None
         if proc.returncode != 0 or not os.path.exists(dst):
             msg = "\n".join(line for line in (proc.stderr + proc.stdout).splitlines() if "npm warn" not in line)
             raise RenderError(msg.strip() or f"mermaid-cli が終了コード {proc.returncode} で失敗")

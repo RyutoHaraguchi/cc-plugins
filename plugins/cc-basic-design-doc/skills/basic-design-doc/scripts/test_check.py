@@ -187,6 +187,36 @@ class CheckTest(unittest.TestCase):
         html = mutate("<td>独立レビュー</td><td>穴なし</td><td>なし</td>", "<td>独立レビュー</td><td>未実施</td><td>—</td>")
         self.assertError(html, "未実施")
 
+    def _approved_base(self):
+        html = re.sub(r'(data-table="open-issues">.*?<tbody>).*?(</tbody>)', r"\1\2", VALID, flags=re.S)
+        html = html.replace("、未決は Q-1", "")
+        return mutate(">レビュー中<", ">承認済み<", html)
+
+    def test_approved_requires_approval_result(self):
+        html = mutate("<td>承認</td><td>山田</td><td>未</td><td></td>", "<td>承認</td><td>山田</td><td>却下</td><td>2026-11-09</td>", self._approved_base())
+        self.assertError(html, "承認")
+
+    def test_approved_requires_approval_date(self):
+        html = mutate("<td>承認</td><td>山田</td><td>未</td><td></td>", "<td>承認</td><td>山田</td><td>承認</td><td></td>", self._approved_base())
+        self.assertError(html, "日付")
+
+    def test_reference_like_words_in_code_are_ignored(self):
+        html = mutate("<td>再試行を追加</td>", "<td>再試行を追加（署名は <code>P-256</code>）</td>")
+        errors, _ = check.check(html)
+        self.assertEqual(errors, [])
+
+    def test_source_outside_figure(self):
+        html = mutate("</section>\n<section class=\"panel off\" id=\"errors\"", "<script type=\"text/x-mermaid\">flowchart LR\n A --> B</script></section>\n<section class=\"panel off\" id=\"errors\"")
+        self.assertError(html, "figure")
+
+    def test_blocker_in_design_review_blocks_review_status(self):
+        html = mutate("<td>承認</td><td>山田</td><td>未</td><td></td>", "<td>設計レビュー</td><td>独立レビュー</td><td>ブロッカーあり</td><td>2026-11-09</td></tr><tr><td>承認</td><td>山田</td><td>未</td><td></td>")
+        self.assertError(html, "ブロッカー")
+
+    def test_publish_skeleton_left_in_file(self):
+        html = '<!doctype html><html><head><meta charset=utf8><style>body{margin:0}</style></head><body>\n' + VALID + '</body></html>'
+        self.assertError(html, "外枠")
+
     def test_secret_warns(self):
         self.assertWarning(mutate("<td>再試行を追加</td>", "<td>token=sk-abcdefghijklmnopqrstuvwx</td>"), "機密")
 

@@ -10,8 +10,9 @@
   - 該当しない章（4 データ設計・6 非機能・制約）は section ごと消し、表紙の「扱わない章」表に理由を書く。
   - 番号: D=決定 P=経路 X=例外 U=単体テスト E=結合テスト R=リスク Q=未決。定義はその表の 1 列目の data-id。
   - 本文に D-1・図 3-1・1.3（節）・7 章 と書くと、表示時に自動でリンクになる（飛び先が無い参照はリンクにしない）。
-  - 図は <figure class="fig"> の中の <script type="text/x-mermaid"> に mermaid で書き、scripts/render_mermaid.py で SVG にする。
-    <pre class="mermaid"> は使わない（Artifact のビューアーでしか図にならず、ダウンロードした HTML ではコードのまま出る）。
+    番号と同じ形の外部の語（P-256 など）や、節番号でない小数は code 要素で囲む（リンクにも参照検査にもならない）。
+  - 図は figure（class=fig）の中の script（type=text/x-mermaid）に mermaid で書き、scripts/render_mermaid.py で SVG にする。
+    pre（class=mermaid）は使わない（Artifact のビューアーでしか図にならず、ダウンロードした HTML ではコードのまま出る）。
 -->
 <style>
 /* Layout: 設計書の体裁。上に文書情報、その下に章タブ、本文は 1 カラムの読み物。図と表は横スクロール可の枠に入れる */
@@ -169,6 +170,7 @@ tr[id], figure[id], h3[id] { scroll-margin-top: 72px }
   </table></div>
 
   <h3>承認</h3>
+  <!-- 「承認」行の結果は「未」「承認」「却下」。状態を「承認済み」にするのは、結果が「承認」で日付が入ったときだけ -->
   <div class="tbl"><table class="t" data-table="approvals">
     <thead><tr><th>役割</th><th>担当</th><th>結果</th><th>日付</th></tr></thead>
     <tbody>
@@ -272,7 +274,7 @@ sequenceDiagram
 
 <section class="panel off" id="data" data-label="4. データ設計" role="tabpanel">
   <h2><span class="no">4</span>データ設計</h2>
-  <!-- 該当する節だけ書く。スキーマ・キー・トークン・API・メッセージの形と、既存データの扱い -->
+  <!-- 該当する節だけ書く。スキーマ・キー・API・メッセージ・ファイルの形と、既存データの扱い -->
   <h3><span class="no">4.1</span>【記入: データ構造・インターフェース名】</h3>
   <div class="tbl"><table class="t">
     <thead><tr><th>項目</th><th>内容</th><th>変更</th></tr></thead>
@@ -281,7 +283,7 @@ sequenceDiagram
     </tbody>
   </table></div>
   <h3><span class="no">4.2</span>既存データと移行</h3>
-  <p>【記入: 旧形式のデータ・トークンがどの環境に存在し、どう扱うか】</p>
+  <p>【記入: 旧形式のデータ（レコード・キャッシュ・発行済みの値・送信済みのメッセージなど）がどの環境に存在し、どう扱うか】</p>
 </section>
 
 <section class="panel off" id="errors" data-label="5. 例外設計" role="tabpanel">
@@ -364,7 +366,8 @@ sequenceDiagram
   });
 
   /* 本文中の参照をリンクにする */
-  var RE = /(?<![A-Za-z0-9_])([DPXUERQ]-\d+)(?!\d)|図\s?(\d+-\d+)(?!\d)|(?<!\d)第?\s?(\d+)\s?章|(?<![\d.v])(\d+\.\d+)(?![\d.])/g;
+  /* 節番号は、版番号（v1.2・13.7.0）と単位付きの数（1.5 秒・2.0 倍・1.2GB）を除く */
+  var RE = /(?<![A-Za-z0-9_])([DPXUERQ]-\d+)(?!\d)|図\s?(\d+-\d+)(?!\d)|(?<!\d)第?\s?(\d+)\s?章|(?<![\d.vV])(\d+\.\d+)(?![\d.])(?!\s?[A-Za-z%°秒分時日倍回件円個年月週人台枚行字])/g;
   var SKIP = "a,script,style,svg,h2,h3,thead,code,.rev,td[data-id],[data-table=revisions],[data-table=reviews]";
   function targetOf(m) {
     if (m[1]) return m[1];
@@ -402,7 +405,7 @@ sequenceDiagram
     b.addEventListener("click", function () { show(p.id, true) });
     li.appendChild(b); list.appendChild(li); return b;
   });
-  function show(id, push) {
+  function show(id, push, moveFocus) {
     var panelId = id, target = null;
     if (!panels.some(function (p) { return p.id === id })) {
       target = id ? document.getElementById(id) : null;
@@ -420,13 +423,17 @@ sequenceDiagram
     if (target) {
       target.scrollIntoView({ block: "center" });
       target.classList.remove("flash"); void target.offsetWidth; target.classList.add("flash");
+      if (moveFocus) {
+        if (!target.hasAttribute("tabindex")) target.setAttribute("tabindex", "-1");
+        try { target.focus({ preventScroll: true }) } catch (e) {}
+      }
     }
     if (push && location.hash !== "#" + id) { try { history.replaceState(null, "", "#" + id) } catch (e) { location.hash = id } }
   }
   document.addEventListener("click", function (e) {
     var a = e.target.closest && e.target.closest("a.xref"); if (!a) return;
     var id = a.getAttribute("href").slice(1);
-    if (location.hash === "#" + id) { e.preventDefault(); show(id, false) }
+    if (location.hash === "#" + id) { e.preventDefault(); show(id, false, true) }
   });
   list.addEventListener("keydown", function (e) {
     var i = buttons.indexOf(document.activeElement); if (i < 0) return;
@@ -435,7 +442,7 @@ sequenceDiagram
       buttons[n].focus(); show(panels[n].id, true); e.preventDefault();
     }
   });
-  window.addEventListener("hashchange", function () { show(location.hash.slice(1), false) });
+  window.addEventListener("hashchange", function () { show(location.hash.slice(1), false, true) });
   show(location.hash.slice(1) || panels[0].id, false);
 })();
 </script>
