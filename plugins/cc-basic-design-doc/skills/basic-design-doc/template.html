@@ -405,10 +405,10 @@ sequenceDiagram
 
   /* ファイル参照（code[data-src]）を GitHub のリンクにする。判定は scripts/check.py の parse_src と同じ */
   var baseEl = document.querySelector('[data-field="base"]');
-  var repo = baseEl ? (baseEl.getAttribute("data-repo") || "").trim() : "";
-  var sha = baseEl ? (baseEl.getAttribute("data-sha") || "").trim() : "";
+  var repo = baseEl ? (baseEl.getAttribute("data-repo") || "") : "";
+  var sha = baseEl ? (baseEl.getAttribute("data-sha") || "") : "";
   /* SRC-BEGIN（test_check.py がここから SRC-END までを Node で実行し、check.py と同じ判定かを確かめる） */
-  var SRC = /^([^:]+)(?::([0-9]+)(?:-([0-9]+))?)?$/;
+  var SRC = /^([^:]+)(?::([0-9]{1,7})(?:-([0-9]{1,7}))?)?$/;
   var SRC_BAD = /[\x00-\x1f\x7f-\xa0\u1680\u2000-\u200f\u2028-\u202f\u205f\u2060\u3000\ufeff]/;
   function srcText(raw) { return raw.replace(/^[ \t\n\r\f]+|[ \t\n\r\f]+$/g, ""); }
   function srcHref(text) {
@@ -423,8 +423,9 @@ sequenceDiagram
     if (start) url += "?plain=1#L" + start + (end && end !== start ? "-L" + end : "");
     return url;
   }
+  function srcLinkable(repo, sha) { return /^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo) && /^[0-9a-f]{40}$/.test(sha); }
   /* SRC-END */
-  if (/^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo) && /^[0-9a-f]{40}$/.test(sha)) {
+  if (srcLinkable(repo, sha)) {
     document.querySelectorAll("code[data-src]").forEach(function (c) {
       if (c.closest("a")) return;
       var href = srcHref(srcText(c.textContent)); if (!href) return;

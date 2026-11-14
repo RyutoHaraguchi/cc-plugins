@@ -205,6 +205,16 @@ class VerifyTest(RepoTest):
         errors, _ = source_links.verify(td + "<code data-src>src/none.ts</code><code data-src>src/new.ts:9</code>", self.work, "origin")
         self.assertEqual(len(errors), 2)
 
+    def test_empty_sha_ignores_hex_in_branch_name(self):
+        """ブランチ名の中の 16 進の語（別の commit の短縮 SHA）ではなく、最後の語の commit で確かめる"""
+        with open(os.path.join(self.work, "src", "sync.ts"), "a") as f:
+            f.write("d\ne\n")
+        later = self.commit_local("src/later.ts")
+        for label, ok in ((f"fix/{later[:7]} {self.pushed[:7]}", False), (f"fix/{self.pushed[:7]} {later[:7]}", True)):
+            td = f'<table><tr><td data-field="base" data-repo="" data-sha="">{label}</td></tr></table>'
+            errors, _ = source_links.verify(td + "<code data-src>src/sync.ts:5</code>", self.work, "origin")
+            self.assertEqual(errors == [], ok, (label, errors))
+
     def test_cli_exit_codes(self):
         ok = os.path.join(self.tmp, "ok.html")
         ng = os.path.join(self.tmp, "ng.html")

@@ -63,10 +63,16 @@ FIG_ID_FORMAT = re.compile(r"\d+-\d+")
 TEMPLATE_GEN = 2  # data-src をリンクにする雛形の世代（<style>・<script> の data-tpl）
 SHA_RE = re.compile(r"[0-9a-f]{40}")
 REPO_RE = re.compile(r"https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
-SRC_RE = re.compile(r"([^:]+)(?::([0-9]+)(?:-([0-9]+))?)?")
+SRC_RE = re.compile(r"([^:]+)(?::([0-9]{1,7})(?:-([0-9]{1,7}))?)?")
 # path に入れない文字: 制御文字と、半角スペース以外の空白・不可視の文字（Python と JS で空白の扱いが違うので、明示して両方で弾く）
 SRC_BAD_RE = re.compile(r"[\x00-\x1f\x7f-\xa0\u1680\u2000-\u200f\u2028-\u202f\u205f\u2060\u3000\ufeff]")
 SRC_TRIM = " \t\n\r\f"
+
+
+def base_short_sha(text):
+    """ベース欄の文字（「branch 短縮SHA」）の最後の語が 7〜40 桁の 16 進なら、それを返す。ブランチ名の中の 16 進は見ない。"""
+    words = text.split()
+    return words[-1] if words and re.fullmatch(r"[0-9a-f]{7,40}", words[-1]) else None
 
 
 def src_text(node):
@@ -419,16 +425,18 @@ def check(html):
 
     # 5.1 ファイル参照のリンク（ヘッダーの data-repo・data-sha と、本文の data-src）
     base_nodes = root.find_all(lambda n: n.attrs.get("data-field") == "base")
-    repo = base_nodes[0].attrs.get("data-repo", "").strip() if base_nodes else ""
-    sha = base_nodes[0].attrs.get("data-sha", "").strip() if base_nodes else ""
+    # 属性の値は前後の空白も含めてそのまま見る（表示時の script と同じ。空白が付いていたら形の違いとして止める）
+    repo = base_nodes[0].attrs.get("data-repo", "") if base_nodes else ""
+    sha = base_nodes[0].attrs.get("data-sha", "") if base_nodes else ""
     if bool(repo) != bool(sha):
         errors.append("ヘッダーの data-repo と data-sha は、両方書くか両方空にする")
     if repo and not REPO_RE.fullmatch(repo):
         errors.append(f"data-repo「{repo}」は https://github.com/<owner>/<repo> の形にする（末尾の / や .git は付けない）")
     if sha and not SHA_RE.fullmatch(sha):
         errors.append(f"data-sha「{sha}」は 40 桁の 16 進（git rev-parse の完全な SHA）にする")
-    elif sha and not any(sha.startswith(w) for w in re.findall(r"(?<![0-9a-f])[0-9a-f]{7,40}(?![0-9a-f])", fields.get("base", ""))):
-        errors.append(f"ベース欄「{fields.get('base', '')}」に、data-sha（{sha[:7]}…）の短縮 SHA が無い。ベースを変えたら両方を直す")
+    elif sha and not sha.startswith(base_short_sha(fields.get("base", "")) or "?"):
+        errors.append(f"ベース欄「{fields.get('base', '')}」の最後の語が、data-sha（{sha[:7]}…）の短縮 SHA でない。"
+                      "「branch 短縮SHA」の形で書き、ベースを変えたら両方を直す")
     src_nodes = root.find_all(lambda n: "data-src" in n.attrs)
     for n in src_nodes:
         text = src_text(n)

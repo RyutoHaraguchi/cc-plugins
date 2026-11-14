@@ -249,8 +249,35 @@ class CheckTest(unittest.TestCase):
     def test_sha_must_be_full(self):
         self.assertError(mutate("abc1234def5678901234567890abcdef12345678", "abc1234"), "40 桁")
 
+    def test_base_attrs_with_surrounding_whitespace(self):
+        for ws in (" ", "\n", "\u0085", "\u00a0", "\u3000"):
+            self.assertError(mutate('data-repo="https://github.com/example/orders"', 'data-repo="https://github.com/example/orders%s"' % ws), "data-repo")
+            self.assertError(mutate('data-sha="abc1234', 'data-sha="%sabc1234' % ws), "40 桁")
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js が無い")
+    def test_template_script_agrees_on_base_attrs(self):
+        """ヘッダーの data-repo・data-sha を、表示時の script と check.py が同じに受理・不受理すること"""
+        with open(os.path.join(HERE, "..", "template.html"), encoding="utf-8") as f:
+            js = re.search(r"/\* SRC-BEGIN.*?\*/(.*?)/\* SRC-END \*/", f.read(), re.S).group(1)
+        good_repo, good_sha = "https://github.com/example/orders", "abc1234def5678901234567890abcdef12345678"
+        pairs = [(good_repo, good_sha)]
+        for ws in (" ", "\t", "\n", "\u0085", "\u00a0", "\u3000", "\u200b"):
+            pairs += [(ws + good_repo, good_sha), (good_repo + ws, good_sha), (good_repo, ws + good_sha), (good_repo, good_sha + ws)]
+        pairs += [("https://gitlab.com/example/orders", good_sha), (good_repo + "/", good_sha), (good_repo + ".git/x", good_sha),
+                  (good_repo, good_sha[:7]), (good_repo, good_sha.upper()), (good_repo, ""), ("", good_sha), ("", "")]
+        code = "var repo = '', sha = '';\n%s\nconsole.log(JSON.stringify(%s.map(function (p) { return srcLinkable(p[0], p[1]) })));" % (js, json.dumps(pairs))
+        out = subprocess.run(["node", "-e", code], capture_output=True, text=True)
+        self.assertEqual(out.returncode, 0, out.stderr)
+        for (repo, sha), linkable in zip(pairs, json.loads(out.stdout)):
+            html = mutate(BASE, '<td data-field="base" data-repo="%s" data-sha="%s">main abc1234</td>' % (repo, sha))
+            errors = [e for e in check.check(html)[0] if "data-repo" in e or "data-sha" in e]
+            # 両方空は「リンクにしない」正しい文書。それ以外は、script がリンクにする ⇔ check.py が ERROR を出さない
+            self.assertEqual(linkable, not errors and bool(repo), f"{repo!r} {sha!r}: script={linkable} check={errors}")
+
     def test_base_text_must_carry_short_sha(self):
         self.assertError(mutate(">main abc1234</td>", ">main fff9999</td>"), "短縮 SHA")
+        self.assertError(mutate(">main abc1234</td>", ">fix/abc1234 fff9999</td>"), "短縮 SHA")
+        self.assertError(mutate(">main abc1234</td>", ">abc1234 main</td>"), "短縮 SHA")
         self.assertEqual(check.check(mutate(">main abc1234</td>", ">origin/main abc1234def56</td>"))[0], [])
 
     def test_src_format(self):
@@ -308,7 +335,8 @@ class CheckTest(unittest.TestCase):
                 "", " ", "/", "/abs.ts", "./x.ts", "src/../x.ts", "src//x.ts", "src/x.ts:0", "src/x.ts:9-3", "src/:3", "src/x.ts:",
                 "src/x.ts:1-", "localhost:3000/x", "a:b.txt:5", "src\\x.ts", "src/x.ts:１０", "src/x.ts:١", "\u0085src/x.ts:1",
                 "src/x\u00a0y.ts", "src/x\u3000y.ts", "src/x\ty.ts", "src/x\ny.ts", "src/ x.ts", "src/x.ts /y", "\u200bsrc/x.ts",
-                "src/x.ts:1 ", "src/x.ts :1", "src/x.ts: 1"]
+                "src/x.ts:1 ", "src/x.ts :1", "src/x.ts: 1", "src/x.ts:9999999", "src/x.ts:10000000",
+                "src/x.ts:9007199254740993", "src/x.ts:1-10000000"]
         code = ("var repo = 'https://github.com/o/r', sha = '%s';\n%s\n"
                 "console.log(JSON.stringify(%s.map(function (r) { return srcHref(srcText(r)) })));" % (sha, js, json.dumps(raws)))
         out = subprocess.run(["node", "-e", code], capture_output=True, text=True)

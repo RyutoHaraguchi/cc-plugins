@@ -135,15 +135,14 @@ def verify(html, repo, remote):
     refs = tb.root.find_all(lambda n: "data-src" in n.attrs)
     if not bases:
         return ["ヘッダーの data-field=\"base\" が無い"], info
-    sha = bases[0].attrs.get("data-sha", "").strip()
+    sha = bases[0].attrs.get("data-sha", "")
     linked = bool(sha)
     if not linked:
         # リンクにしない文書でも、ベース欄の短縮 SHA がこのリポジトリで解決できれば、実在だけは確かめる
         info.append(f"data-sha が空なので、data-src {len(refs)} 件はリンクにならない（文字のまま）")
-        for word in re.findall(r"(?<![0-9a-f])[0-9a-f]{7,40}(?![0-9a-f])", check.norm(bases[0].text())):
-            sha = git(repo, "rev-parse", "--verify", "--quiet", word + "^{commit}", check_rc=False).stdout.decode().strip()
-            if sha:
-                break
+        short = check.base_short_sha(check.norm(bases[0].text()))
+        if short:
+            sha = git(repo, "rev-parse", "--verify", "--quiet", short + "^{commit}", check_rc=False).stdout.decode().strip()
         if not sha:
             info.append("ベース欄の commit がこのリポジトリで解決できないので、実在は確かめていない")
             return errors, info
@@ -152,7 +151,7 @@ def verify(html, repo, remote):
     if git(repo, "cat-file", "-e", sha + "^{commit}", check_rc=False).returncode != 0:
         return [f"data-sha {sha[:12]} がこのリポジトリ（{os.path.abspath(repo)}）に無い。"
                 "git fetch するか、--repo で対象のリポジトリを指定する"], info
-    data_repo = bases[0].attrs.get("data-repo", "").strip()
+    data_repo = bases[0].attrs.get("data-repo", "")
     remote_url, repo_url = repo_url_of(repo, remote)
     if not linked:
         pass
