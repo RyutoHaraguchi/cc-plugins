@@ -13,14 +13,16 @@
   - 決定（D-n）・経路（P-n）・例外（X-n）・リスク（R-n）・テスト（U-n／E-n）・未決（Q-n）の表は列が固定
   - 章タブ（`#hash` で直接開ける）、ライト／ダーク、スマホ幅に対応
   - 本文の「D-1」「図 3-1」「1.3」「7 章」は表示時に自動でリンクになり、押すとそのタブの該当箇所へ移る
+- **ファイル参照は GitHub のリンクになる**（`scripts/source_links.py`）: 本文の `<code data-src>src/sync.ts:10-24</code>` は、ヘッダーに持つリポジトリの URL とベースの完全な SHA から、表示時に GitHub のその commit・その行へのリンクになる（別タブで開く）。ベースに実在しない path・行数を超える行番号は公開前に ERROR で止める。ベースが push されていない・remote が github.com でないときは、リンクにせず文字のまま出す（そのときも、ベースの commit が手元で解決できれば実在は確かめる）
 - **図は SVG で埋め込む**（`scripts/render_mermaid.py`）: mermaid で書いた図を、ライト用・ダーク用の SVG にして HTML に入れる。ダウンロードした HTML やオフラインでも図が見える。構文エラーは図の番号付きで止まる
-- **機械検査**（`scripts/check.py`）: 置き換え忘れ・必須の章や表の欠け・列の違い・空欄・番号の参照切れ・選択肢にない値・版数の不一致・未決が残ったままの「承認済み」・SVG にしていない図を ERROR で止める
+- **機械検査**（`scripts/check.py`）: 置き換え忘れ・必須の章や表の欠け・列の違い・空欄・番号の参照切れ・選択肢にない値・版数の不一致・未決が残ったままの「承認済み」・SVG にしていない図・ファイル参照の書式違いを ERROR で止める
 - **品質の観点**（`quality-checklist.md`）と**独立レビュー**（`reviewer-prompt.md`）: 文脈を持たない subagent に「この文書だけで実装・レビューできるか」を読ませ、穴を「事実（調べて直す）／軽微（直して作成者判断と記録）／決定が要る（未決にして 1 問ずつ聞く）」に振り分ける
 
 ## 前提
 
 - claude.ai の Artifact が使える環境
 - Python 3（検査は標準ライブラリだけ）
+- git（ファイル参照のリンク。対応するのは github.com のリポジトリ。非公開リポジトリのリンクは、見られる人にしか開けない）
 - Node.js（`npx`）と Chrome または Chromium（図の SVG 化。Chrome が無ければ puppeteer が取得する。場所は環境変数 `MERMAID_CHROME` で指定できる）
 
 ## インストール
@@ -51,11 +53,11 @@ claude --plugin-dir ./plugins/cc-basic-design-doc
 ```
 
 1. 材料（会話での決定・設計メモ・issue）を読み、対象リポジトリのベース commit を決めて、現状の挙動をコードで裏取りする
-2. 雛形を埋め、図を SVG にして、機械検査を ERROR 0 件まで通す
+2. 雛形を埋め、図を SVG にして、機械検査とファイル参照の実在確認を ERROR 0 件まで通す
 3. 自己点検と独立レビューで穴を探し、決定が要るものだけを推奨付きで 1 問ずつ聞く
 4. Artifact として非公開で公開し、URL・版数・状態・残る未決・作成者判断の一覧を報告する
 
-改訂は `/basic-design-doc <artifact URL>` で、同じ URL のまま版を上げます。
+改訂は `/basic-design-doc <artifact URL>` で、同じ URL のまま版を上げます。0.1.0 の雛形で作った設計書は、改訂のときに体裁と script を今の雛形のものに置き換え、ファイル参照をリンクにします。
 
 ## テスト
 
@@ -63,4 +65,5 @@ claude --plugin-dir ./plugins/cc-basic-design-doc
 cd plugins/cc-basic-design-doc/skills/basic-design-doc/scripts
 python3 -I test_check.py
 python3 -I test_render_mermaid.py
+python3 -I test_source_links.py
 ```
