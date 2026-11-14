@@ -6,6 +6,7 @@
       リンクにできないとき（remote が無い・GitHub でない・commit が remote に無い）は理由と、属性が空の <td> を出す。
   python3 source_links.py verify <design.html> [--repo DIR] [--remote origin]
       文書の data-src が、data-sha の時点のリポジトリに実在するか（ファイル・ディレクトリ・行番号）を確かめる。
+      data-sha が空（リンクにしない文書）のときは、ベース欄の短縮 SHA が解決できれば、それで実在だけを確かめる。
 
 終了コード: 0 = 問題なし（リンクにできない場合も含む）, 1 = ERROR あり, 2 = 引数・読み込み・git の誤り
 標準ライブラリと git だけで動く。ネットワークには出ない。push 済みかは、URL を取ったのと同じ remote の追跡ブランチ
@@ -135,17 +136,27 @@ def verify(html, repo, remote):
     if not bases:
         return ["ヘッダーの data-field=\"base\" が無い"], info
     sha = bases[0].attrs.get("data-sha", "").strip()
-    if not sha:
+    linked = bool(sha)
+    if not linked:
+        # リンクにしない文書でも、ベース欄の短縮 SHA がこのリポジトリで解決できれば、実在だけは確かめる
         info.append(f"data-sha が空なので、data-src {len(refs)} 件はリンクにならない（文字のまま）")
-        return errors, info
-    if not check.SHA_RE.fullmatch(sha):
+        for word in re.findall(r"(?<![0-9a-f])[0-9a-f]{7,40}(?![0-9a-f])", check.norm(bases[0].text())):
+            sha = git(repo, "rev-parse", "--verify", "--quiet", word + "^{commit}", check_rc=False).stdout.decode().strip()
+            if sha:
+                break
+        if not sha:
+            info.append("ベース欄の commit がこのリポジトリで解決できないので、実在は確かめていない")
+            return errors, info
+    elif not check.SHA_RE.fullmatch(sha):
         return [f"data-sha「{sha}」は 40 桁の 16 進にする"], info
     if git(repo, "cat-file", "-e", sha + "^{commit}", check_rc=False).returncode != 0:
         return [f"data-sha {sha[:12]} がこのリポジトリ（{os.path.abspath(repo)}）に無い。"
                 "git fetch するか、--repo で対象のリポジトリを指定する"], info
     data_repo = bases[0].attrs.get("data-repo", "").strip()
     remote_url, repo_url = repo_url_of(repo, remote)
-    if (repo_url or "").lower() != data_repo.lower():
+    if not linked:
+        pass
+    elif (repo_url or "").lower() != data_repo.lower():
         errors.append(f"data-repo「{data_repo}」が、このリポジトリの remote {remote}（{remote_url or '無い'}）と違う。"
                       "--repo・--remote で対象を合わせるか、data-repo を直す")
     elif not remote_branches(repo, sha, remote):
@@ -153,7 +164,7 @@ def verify(html, repo, remote):
                       "push するか、data-repo・data-sha を空にする")
     cache = {}
     for n in refs:
-        text = check.norm(n.text())
+        text = check.src_text(n)
         parsed = check.parse_src(text)
         if not parsed:
             errors.append(f"data-src「{text}」は path・path:N・path:N-M の形にする")

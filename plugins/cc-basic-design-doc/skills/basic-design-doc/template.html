@@ -407,12 +407,15 @@ sequenceDiagram
   var baseEl = document.querySelector('[data-field="base"]');
   var repo = baseEl ? (baseEl.getAttribute("data-repo") || "").trim() : "";
   var sha = baseEl ? (baseEl.getAttribute("data-sha") || "").trim() : "";
-  var SRC = /^([^:]+)(?::(\d+)(?:-(\d+))?)?$/;
+  /* SRC-BEGIN（test_check.py がここから SRC-END までを Node で実行し、check.py と同じ判定かを確かめる） */
+  var SRC = /^([^:]+)(?::([0-9]+)(?:-([0-9]+))?)?$/;
+  var SRC_BAD = /[\x00-\x1f\x7f-\xa0\u1680\u2000-\u200f\u2028-\u202f\u205f\u2060\u3000\ufeff]/;
+  function srcText(raw) { return raw.replace(/^[ \t\n\r\f]+|[ \t\n\r\f]+$/g, ""); }
   function srcHref(text) {
-    var m = SRC.exec(text); if (!m) return null;
+    var m = SRC.exec(text); if (!m || SRC_BAD.test(text)) return null;
     var segs = m[1].split("/"), dir = segs[segs.length - 1] === "";
     if (dir) { if (m[2]) return null; segs.pop(); }
-    if (!segs.length || segs.some(function (s) { return s === "" || s === "." || s === ".." || s !== s.trim() || s.indexOf("\\") >= 0 })) return null;
+    if (!segs.length || segs.some(function (s) { return s === "" || s === "." || s === ".." || s.charAt(0) === " " || s.charAt(s.length - 1) === " " || s.indexOf("\\") >= 0 })) return null;
     var start = m[2] ? parseInt(m[2], 10) : 0, end = m[3] ? parseInt(m[3], 10) : 0;
     if (m[2] && (start < 1 || (m[3] && end < start))) return null;
     var url = repo + (dir ? "/tree/" : "/blob/") + sha + "/" + segs.map(encodeURIComponent).join("/");
@@ -420,10 +423,11 @@ sequenceDiagram
     if (start) url += "?plain=1#L" + start + (end && end !== start ? "-L" + end : "");
     return url;
   }
+  /* SRC-END */
   if (/^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo) && /^[0-9a-f]{40}$/.test(sha)) {
     document.querySelectorAll("code[data-src]").forEach(function (c) {
       if (c.closest("a")) return;
-      var href = srcHref(c.textContent.replace(/\s+/g, " ").trim()); if (!href) return;
+      var href = srcHref(srcText(c.textContent)); if (!href) return;
       var a = document.createElement("a");
       a.className = "srclink"; a.href = href; a.target = "_blank"; a.rel = "noopener noreferrer";
       a.title = "GitHub で開く（" + sha.slice(0, 7) + "）";

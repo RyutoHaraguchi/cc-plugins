@@ -1,6 +1,9 @@
+import json
 import os
 import re
+import shutil
 import subprocess
+import urllib.parse
 import sys
 import unittest
 
@@ -252,7 +255,8 @@ class CheckTest(unittest.TestCase):
 
     def test_src_format(self):
         for bad in ("/src/sync.ts", "./src/sync.ts", "src//sync.ts", "src/../sync.ts", "src/sync.ts:0", "src/sync.ts:9-3",
-                    "src/:3", "src/sync.ts:", "src/sync.ts:1-", "/", "src\\sync.ts", "a:b.txt:5", "localhost:3000/x"):
+                    "src/:3", "src/sync.ts:", "src/sync.ts:1-", "/", "src\\sync.ts", "a:b.txt:5", "localhost:3000/x",
+                    "src/sync.ts:１０", "src/sync.ts:１０-１２"):
             self.assertError(mutate(SRC, "<code data-src>%s</code> の" % bad), "data-src")
         for ok in ("src/sync.ts", "src/sync.ts:1", "src/sync.ts:3-3", "src/sync.ts:10-24", "src/", "docs/設計 メモ.md:2",
                    "Makefile"):
@@ -263,6 +267,14 @@ class CheckTest(unittest.TestCase):
         self.assertEqual(check.parse_src("src/sync.ts:10"), ("src/sync.ts", 10, None))
         self.assertEqual(check.parse_src("src/"), ("src/", None, None))
         self.assertIsNone(check.parse_src("a:b.txt:5"))
+
+    def test_src_attribute_value(self):
+        self.assertError(mutate(SRC, '<code data-src="src/sync.ts">run</code> の'), "値")
+
+    def test_template_has_no_src_format_error(self):
+        with open(os.path.join(HERE, "..", "template.html"), encoding="utf-8") as f:
+            errors, _ = check.check(f.read())
+        self.assertFalse([e for e in errors if "data-src" in e], errors)
 
     def test_src_on_non_code(self):
         self.assertError(mutate(SRC, "<span data-src>src/sync.ts</span> の"), "code 要素")
@@ -280,9 +292,47 @@ class CheckTest(unittest.TestCase):
         with open(os.path.join(HERE, "..", "template.html"), encoding="utf-8") as f:
             tpl = f.read()
         self.assertIn("/^" + check.SRC_RE.pattern + "$/", tpl)
+        self.assertIn("/" + check.SRC_BAD_RE.pattern + "/", tpl)
         self.assertIn("/^" + check.REPO_RE.pattern.replace("/", "\\/") + "$/", tpl)
         self.assertIn("/^" + check.SHA_RE.pattern + "$/", tpl)
         self.assertIn('data-tpl="%d"' % check.TEMPLATE_GEN, tpl)
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js が無い")
+    def test_template_script_agrees_with_parse_src(self):
+        """同じ入力を、表示時の script（Node で実行）と check.py に通し、受理・不受理と path・行が一致すること"""
+        with open(os.path.join(HERE, "..", "template.html"), encoding="utf-8") as f:
+            js = re.search(r"/\* SRC-BEGIN.*?\*/(.*?)/\* SRC-END \*/", f.read(), re.S).group(1)
+        sha = "abc1234def5678901234567890abcdef12345678"
+        raws = ["src/sync.ts", "src/sync.ts:10", "src/sync.ts:10-24", "src/sync.ts:7-7", "src/", "docs/設計 メモ.md:2",
+                "docs/a  b.md:1", "a#b/c?d%20.ts:1", "  src/pad.ts:3\n ", "\tsrc/tab.ts\n", "Makefile", "src/sync.ts:007",
+                "", " ", "/", "/abs.ts", "./x.ts", "src/../x.ts", "src//x.ts", "src/x.ts:0", "src/x.ts:9-3", "src/:3", "src/x.ts:",
+                "src/x.ts:1-", "localhost:3000/x", "a:b.txt:5", "src\\x.ts", "src/x.ts:１０", "src/x.ts:١", "\u0085src/x.ts:1",
+                "src/x\u00a0y.ts", "src/x\u3000y.ts", "src/x\ty.ts", "src/x\ny.ts", "src/ x.ts", "src/x.ts /y", "\u200bsrc/x.ts",
+                "src/x.ts:1 ", "src/x.ts :1", "src/x.ts: 1"]
+        code = ("var repo = 'https://github.com/o/r', sha = '%s';\n%s\n"
+                "console.log(JSON.stringify(%s.map(function (r) { return srcHref(srcText(r)) })));" % (sha, js, json.dumps(raws)))
+        out = subprocess.run(["node", "-e", code], capture_output=True, text=True)
+        self.assertEqual(out.returncode, 0, out.stderr)
+        hrefs = json.loads(out.stdout)
+
+        class T:  # src_text に渡す、text() だけ持つ代わりの要素
+            def __init__(self, raw):
+                self.raw = raw
+
+            def text(self):
+                return self.raw
+
+        for raw, href in zip(raws, hrefs):
+            parsed = check.parse_src(check.src_text(T(raw)))
+            self.assertEqual(parsed is None, href is None, f"{raw!r}: check.py={parsed} script={href}")
+            if parsed is None:
+                continue
+            path, start, end = parsed
+            kind = "tree" if path.endswith("/") else "blob"
+            want = f"https://github.com/o/r/{kind}/{sha}/" + urllib.parse.quote(path.rstrip("/"), safe="/-_.!~*'()")
+            if start:
+                want += f"?plain=1#L{start}" + (f"-L{end}" if end and end != start else "")
+            self.assertEqual(href, want, raw)
 
     def test_cli_exit_codes(self):
         script = os.path.join(HERE, "check.py")

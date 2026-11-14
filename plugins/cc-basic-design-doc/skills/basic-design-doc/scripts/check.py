@@ -63,7 +63,15 @@ FIG_ID_FORMAT = re.compile(r"\d+-\d+")
 TEMPLATE_GEN = 2  # data-src をリンクにする雛形の世代（<style>・<script> の data-tpl）
 SHA_RE = re.compile(r"[0-9a-f]{40}")
 REPO_RE = re.compile(r"https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
-SRC_RE = re.compile(r"([^:]+)(?::(\d+)(?:-(\d+))?)?")
+SRC_RE = re.compile(r"([^:]+)(?::([0-9]+)(?:-([0-9]+))?)?")
+# path に入れない文字: 制御文字と、半角スペース以外の空白・不可視の文字（Python と JS で空白の扱いが違うので、明示して両方で弾く）
+SRC_BAD_RE = re.compile(r"[\x00-\x1f\x7f-\xa0\u1680\u2000-\u200f\u2028-\u202f\u205f\u2060\u3000\ufeff]")
+SRC_TRIM = " \t\n\r\f"
+
+
+def src_text(node):
+    """data-src の要素の中身。前後の空白・改行だけを落とす（途中の空白は path の一部なので変えない）。"""
+    return node.text().strip(SRC_TRIM)
 
 
 def parse_src(text):
@@ -73,7 +81,7 @@ def parse_src(text):
     path に : を含むファイルは扱わない（行番号と区別できないので、目印を付けずに文字で書く）。
     """
     m = SRC_RE.fullmatch(text)
-    if not m:
+    if not m or SRC_BAD_RE.search(text):
         return None
     path, start, end = m.group(1), m.group(2), m.group(3)
     segs = path.split("/")
@@ -81,7 +89,7 @@ def parse_src(text):
         if start:
             return None
         segs = segs[:-1]
-    if not segs or any(seg in ("", ".", "..") or seg != seg.strip() or "\\" in seg for seg in segs):
+    if not segs or any(seg in ("", ".", "..") or seg != seg.strip(" ") or "\\" in seg for seg in segs):
         return None
     start = int(start) if start else None
     end = int(end) if end else None
@@ -423,9 +431,13 @@ def check(html):
         errors.append(f"ベース欄「{fields.get('base', '')}」に、data-sha（{sha[:7]}…）の短縮 SHA が無い。ベースを変えたら両方を直す")
     src_nodes = root.find_all(lambda n: "data-src" in n.attrs)
     for n in src_nodes:
-        text = norm(n.text())
+        text = src_text(n)
         if n.tag != "code":
             errors.append(f"data-src「{text}」は code 要素に付ける")
+        elif n.attrs["data-src"].strip():
+            errors.append(f"data-src に値（{n.attrs['data-src']}）を書かない。path は code 要素の中身に書く")
+        elif "【記入" in text:
+            pass  # 置き換え忘れとして 1. で止めている
         elif not parse_src(text):
             errors.append(f"data-src「{text}」は path・path:N・path:N-M の形にする（path はリポジトリのルートから。ディレクトリは末尾に /）")
         if _in(n, "a"):

@@ -195,6 +195,15 @@ class VerifyTest(RepoTest):
         errors, info = source_links.verify(html, self.work, "origin")
         self.assertEqual(errors, [])
         self.assertTrue(any("リンクにならない" in i for i in info))
+        self.assertTrue(any("確かめていない" in i for i in info))
+
+    def test_empty_sha_still_checks_existence_by_short_sha(self):
+        """未 push などでリンクにしない文書でも、ベース欄の短縮 SHA で実在を確かめる"""
+        sha = self.commit_local("src/new.ts")
+        td = f'<table><tr><td data-field="base" data-repo="" data-sha="">HEAD {sha[:7]}</td></tr></table>'
+        self.assertEqual(source_links.verify(td + "<code data-src>src/new.ts:1</code>", self.work, "origin")[0], [])
+        errors, _ = source_links.verify(td + "<code data-src>src/none.ts</code><code data-src>src/new.ts:9</code>", self.work, "origin")
+        self.assertEqual(len(errors), 2)
 
     def test_cli_exit_codes(self):
         ok = os.path.join(self.tmp, "ok.html")
