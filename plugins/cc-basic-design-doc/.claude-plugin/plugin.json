@@ -1,7 +1,7 @@
 {
   "name": "cc-basic-design-doc",
   "description": "固まった設計を、決まった様式の基本設計書（HTML 1 枚）にして Artifact で公開する。雛形・機械検査・独立レビューで、毎回同じ形とこの 1 枚で設計が把握できる品質を担保する",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "author": {
     "name": "ryutoharaguchi"
   },

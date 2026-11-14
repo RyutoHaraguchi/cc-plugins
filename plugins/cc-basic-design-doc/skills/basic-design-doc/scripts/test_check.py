@@ -26,6 +26,10 @@ def remove_section(section_id, src=None):
     return out
 
 
+BASE = '<td data-field="base" data-repo="https://github.com/example/orders" data-sha="abc1234def5678901234567890abcdef12345678">main abc1234</td>'
+SRC = "<code data-src>src/sync.ts</code> の"
+
+
 class CheckTest(unittest.TestCase):
     def assertError(self, html, fragment):
         errors, _ = check.check(html)
@@ -70,7 +74,7 @@ class CheckTest(unittest.TestCase):
         self.assertError(html, "6")
 
     def test_header_field_empty(self):
-        self.assertError(mutate('<td data-field="base">main abc1234</td>', '<td data-field="base"></td>'), "base")
+        self.assertError(mutate(BASE, '<td data-field="base"></td>'), "base")
 
     def test_status_enum(self):
         self.assertError(mutate(">レビュー中<", ">確認中<"), "status")
@@ -219,6 +223,66 @@ class CheckTest(unittest.TestCase):
 
     def test_secret_warns(self):
         self.assertWarning(mutate("<td>再試行を追加</td>", "<td>token=sk-abcdefghijklmnopqrstuvwx</td>"), "機密")
+
+    def test_base_without_link_attrs_passes(self):
+        """0.1.0 の雛形で作った文書（属性なし・data-src なし・data-tpl なし）はそのまま通る"""
+        html = mutate(BASE, '<td data-field="base">main abc1234</td>')
+        html = html.replace("<code data-src>", "<code>").replace(' data-tpl="2"', "")
+        self.assertEqual(check.check(html)[0], [])
+
+    def test_src_marks_without_base_attrs_pass(self):
+        """リンクにできないとき: data-repo・data-sha が空でも、data-src は残してよい"""
+        html = mutate(BASE, '<td data-field="base" data-repo="" data-sha="">なし（新規）</td>')
+        self.assertEqual(check.check(html)[0], [])
+
+    def test_repo_without_sha(self):
+        self.assertError(mutate(' data-sha="abc1234def5678901234567890abcdef12345678"', ' data-sha=""'), "両方")
+
+    def test_repo_must_be_github(self):
+        for bad in ("https://gitlab.com/example/orders", "https://github.com/example/orders/", "https://github.com/example/orders.git/x",
+                    "git@github.com:example/orders.git", "http://github.com/example/orders"):
+            self.assertError(mutate("https://github.com/example/orders", bad), "data-repo")
+
+    def test_sha_must_be_full(self):
+        self.assertError(mutate("abc1234def5678901234567890abcdef12345678", "abc1234"), "40 桁")
+
+    def test_base_text_must_carry_short_sha(self):
+        self.assertError(mutate(">main abc1234</td>", ">main fff9999</td>"), "短縮 SHA")
+        self.assertEqual(check.check(mutate(">main abc1234</td>", ">origin/main abc1234def56</td>"))[0], [])
+
+    def test_src_format(self):
+        for bad in ("/src/sync.ts", "./src/sync.ts", "src//sync.ts", "src/../sync.ts", "src/sync.ts:0", "src/sync.ts:9-3",
+                    "src/:3", "src/sync.ts:", "src/sync.ts:1-", "/", "src\\sync.ts", "a:b.txt:5", "localhost:3000/x"):
+            self.assertError(mutate(SRC, "<code data-src>%s</code> の" % bad), "data-src")
+        for ok in ("src/sync.ts", "src/sync.ts:1", "src/sync.ts:3-3", "src/sync.ts:10-24", "src/", "docs/設計 メモ.md:2",
+                   "Makefile"):
+            self.assertEqual(check.check(mutate(SRC, "<code data-src>%s</code> の" % ok))[0], [], ok)
+
+    def test_parse_src(self):
+        self.assertEqual(check.parse_src("src/sync.ts:10-24"), ("src/sync.ts", 10, 24))
+        self.assertEqual(check.parse_src("src/sync.ts:10"), ("src/sync.ts", 10, None))
+        self.assertEqual(check.parse_src("src/"), ("src/", None, None))
+        self.assertIsNone(check.parse_src("a:b.txt:5"))
+
+    def test_src_on_non_code(self):
+        self.assertError(mutate(SRC, "<span data-src>src/sync.ts</span> の"), "code 要素")
+
+    def test_src_inside_anchor(self):
+        self.assertError(mutate(SRC, '<a href="https://github.com/example/orders/blob/old/src/sync.ts"><code data-src>src/sync.ts</code></a> の'), "a 要素")
+
+    def test_src_needs_current_template(self):
+        self.assertError(mutate('<script data-tpl="2">', "<script>"), "<script>")
+        self.assertError(mutate('<style data-tpl="2">', "<style>"), "<style>")
+        self.assertError(mutate('<script data-tpl="2">', '<script data-tpl="1">'), "<script>")
+
+    def test_template_script_matches_parse_src(self):
+        """表示時の script の判定式が check.py と同じ形であること（片方だけ直すのを防ぐ）"""
+        with open(os.path.join(HERE, "..", "template.html"), encoding="utf-8") as f:
+            tpl = f.read()
+        self.assertIn("/^" + check.SRC_RE.pattern + "$/", tpl)
+        self.assertIn("/^" + check.REPO_RE.pattern.replace("/", "\\/") + "$/", tpl)
+        self.assertIn("/^" + check.SHA_RE.pattern + "$/", tpl)
+        self.assertIn('data-tpl="%d"' % check.TEMPLATE_GEN, tpl)
 
     def test_cli_exit_codes(self):
         script = os.path.join(HERE, "check.py")

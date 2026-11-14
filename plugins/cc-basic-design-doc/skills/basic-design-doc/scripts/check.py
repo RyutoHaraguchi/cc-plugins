@@ -59,6 +59,36 @@ SECRET_RES = [
 
 FIG_ID_FORMAT = re.compile(r"\d+-\d+")
 
+# ファイル参照（data-src）と、リンクの元になるヘッダーの属性。template.html の script の SRC と同じ判定にする
+TEMPLATE_GEN = 2  # data-src をリンクにする雛形の世代（<style>・<script> の data-tpl）
+SHA_RE = re.compile(r"[0-9a-f]{40}")
+REPO_RE = re.compile(r"https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
+SRC_RE = re.compile(r"([^:]+)(?::(\d+)(?:-(\d+))?)?")
+
+
+def parse_src(text):
+    """data-src の中身を (path, 開始行, 終了行) にする。行が無ければ None。形が違えば None を返す。
+
+    path はリポジトリのルートからの相対。末尾の / はディレクトリ（行番号は付けられない）。
+    path に : を含むファイルは扱わない（行番号と区別できないので、目印を付けずに文字で書く）。
+    """
+    m = SRC_RE.fullmatch(text)
+    if not m:
+        return None
+    path, start, end = m.group(1), m.group(2), m.group(3)
+    segs = path.split("/")
+    if segs[-1] == "":
+        if start:
+            return None
+        segs = segs[:-1]
+    if not segs or any(seg in ("", ".", "..") or seg != seg.strip() or "\\" in seg for seg in segs):
+        return None
+    start = int(start) if start else None
+    end = int(end) if end else None
+    if start is not None and (start < 1 or (end is not None and end < start)):
+        return None
+    return path, start, end
+
 
 def src_hash(source):
     """図の定義のハッシュ。render_mermaid.py が SVG と一緒に記録し、check.py が描き直し漏れを見る"""
@@ -378,6 +408,33 @@ def check(html):
     if fields.get("date") and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", fields["date"]):
         errors.append(f"date「{fields['date']}」は YYYY-MM-DD にする")
     version = fields.get("version", "")
+
+    # 5.1 ファイル参照のリンク（ヘッダーの data-repo・data-sha と、本文の data-src）
+    base_nodes = root.find_all(lambda n: n.attrs.get("data-field") == "base")
+    repo = base_nodes[0].attrs.get("data-repo", "").strip() if base_nodes else ""
+    sha = base_nodes[0].attrs.get("data-sha", "").strip() if base_nodes else ""
+    if bool(repo) != bool(sha):
+        errors.append("ヘッダーの data-repo と data-sha は、両方書くか両方空にする")
+    if repo and not REPO_RE.fullmatch(repo):
+        errors.append(f"data-repo「{repo}」は https://github.com/<owner>/<repo> の形にする（末尾の / や .git は付けない）")
+    if sha and not SHA_RE.fullmatch(sha):
+        errors.append(f"data-sha「{sha}」は 40 桁の 16 進（git rev-parse の完全な SHA）にする")
+    elif sha and not any(sha.startswith(w) for w in re.findall(r"(?<![0-9a-f])[0-9a-f]{7,40}(?![0-9a-f])", fields.get("base", ""))):
+        errors.append(f"ベース欄「{fields.get('base', '')}」に、data-sha（{sha[:7]}…）の短縮 SHA が無い。ベースを変えたら両方を直す")
+    src_nodes = root.find_all(lambda n: "data-src" in n.attrs)
+    for n in src_nodes:
+        text = norm(n.text())
+        if n.tag != "code":
+            errors.append(f"data-src「{text}」は code 要素に付ける")
+        elif not parse_src(text):
+            errors.append(f"data-src「{text}」は path・path:N・path:N-M の形にする（path はリポジトリのルートから。ディレクトリは末尾に /）")
+        if _in(n, "a"):
+            errors.append(f"data-src「{text}」を a 要素で囲まない（リンクは表示時に data-repo・data-sha から作る）")
+    if src_nodes:
+        for tag in ("style", "script"):
+            gens = [n.attrs["data-tpl"] for n in root.find_all(lambda n: n.tag == tag and "data-tpl" in n.attrs)]
+            if not any(g.isdigit() and int(g) >= TEMPLATE_GEN for g in gens):
+                errors.append(f"data-src があるのに <{tag}> が古い雛形のまま（data-tpl=\"{TEMPLATE_GEN}\" が無い）。今の template.html の <{tag}> に置き換える")
 
     # 6. 要旨
     summaries = root.find_all(lambda n: n.attrs.get("data-block") == "summary")

@@ -1,4 +1,5 @@
 <title>注文同期 基本設計書</title>
+<style data-tpl="2"></style>
 <div class="wrap">
 <header class="doc">
   <div><div class="eyebrow">基本設計書 ／ Example</div><h1>注文同期の再試行</h1><div class="sub">issue #1</div></div>
@@ -7,7 +8,7 @@
     <tr><th>版数</th><td data-field="version">1.1</td></tr>
     <tr><th>作成日</th><td data-field="date">2026-11-09</td></tr>
     <tr><th>状態</th><td data-field="status">レビュー中</td></tr>
-    <tr><th>ベース</th><td data-field="base">main abc1234</td></tr>
+    <tr><th>ベース</th><td data-field="base" data-repo="https://github.com/example/orders" data-sha="abc1234def5678901234567890abcdef12345678">main abc1234</td></tr>
   </table>
 </header>
 <nav class="tabs"><ol id="tablist"></ol></nav>
@@ -38,11 +39,11 @@
   </table></div>
 </section>
 <section class="panel off" id="overview" data-label="1. 概要">
-  <div data-block="background"><p>同期が失敗すると再送されない（<code>sync.ts:10</code>）。</p></div>
+  <div data-block="background"><p>同期が失敗すると再送されない（<code data-src>src/sync.ts:10</code>）。</p></div>
   <div data-block="purpose"><p>失敗した注文を自動で再送する。</p></div>
   <div class="tbl"><table class="t" data-table="scope">
     <thead><tr><th>対象</th><th>変更内容</th><th>関係する決定</th></tr></thead>
-    <tbody><tr><td><code>sync.ts</code> の <code>run</code></td><td>再試行を追加</td><td>D-1</td></tr></tbody>
+    <tbody><tr><td><code data-src>src/sync.ts</code> の <code>run</code></td><td>再試行を追加</td><td>D-1</td></tr></tbody>
   </table></div>
   <div class="tbl"><table class="t" data-table="out-of-scope">
     <thead><tr><th>対象外</th><th>理由</th></tr></thead>
@@ -104,7 +105,7 @@ flowchart LR
 <section class="panel off" id="evidence" data-label="8. 検証・レビュー記録">
   <div class="tbl"><table class="t" data-table="sources">
     <thead><tr><th>内容</th><th>出典</th><th>確度</th></tr></thead>
-    <tbody><tr><td>失敗時に再送しない</td><td><code>sync.ts:10</code></td><td><span class="pill" data-cert="コード">コード</span></td></tr></tbody>
+    <tbody><tr><td>失敗時に再送しない</td><td><code data-src>src/sync.ts:10</code></td><td><span class="pill" data-cert="コード">コード</span></td></tr></tbody>
   </table></div>
   <div class="tbl"><table class="t" data-table="reviews">
     <thead><tr><th>版数</th><th>レビュー者</th><th>結果</th><th>主な指摘と対応</th></tr></thead>
@@ -113,3 +114,4 @@ flowchart LR
 </section>
 </div>
 </div>
+<script data-tpl="2"></script>
